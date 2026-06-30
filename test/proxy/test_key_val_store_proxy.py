@@ -5,6 +5,7 @@ from urllib.error import HTTPError
 from core.constant.elastic_ip_pool_constant import (
     DEFAULT_TIMEOUT_SECOND_INT,
     KEY_VAL_API_BASE_URL_STR,
+    KEY_VAL_USER_AGENT_STR,
 )
 from core.proxy.key_val_store_proxy import KeyValStoreProxy
 
@@ -31,7 +32,9 @@ class KeyValStoreProxyTest(unittest.TestCase):
     def testGetValueReturnsNormalizedExistingValue(self) -> None:
         with patch(
             "core.proxy.key_val_store_proxy.urlopen",
-            return_value=FakeHttpResponse("stored-hash"),
+            return_value=FakeHttpResponse(
+                '{"status":"SUCCESS","key":"sample-key","val":"stored-hash"}',
+            ),
         ) as urlopenMock:
             resultDict = KeyValStoreProxy().getValue("sample-key")
 
@@ -41,6 +44,7 @@ class KeyValStoreProxyTest(unittest.TestCase):
             f"{KEY_VAL_API_BASE_URL_STR}/get/sample-key",
         )
         self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.headers["User-agent"], KEY_VAL_USER_AGENT_STR)
         self.assertEqual(
             urlopenMock.call_args.kwargs["timeout"],
             DEFAULT_TIMEOUT_SECOND_INT,
@@ -83,7 +87,9 @@ class KeyValStoreProxyTest(unittest.TestCase):
     def testSetValueReturnsNormalizedStoredValue(self) -> None:
         with patch(
             "core.proxy.key_val_store_proxy.urlopen",
-            return_value=FakeHttpResponse("stored-hash"),
+            return_value=FakeHttpResponse(
+                '{"status":"SUCCESS","key":"sample-key","val":"stored-hash"}',
+            ),
         ) as urlopenMock:
             resultDict = KeyValStoreProxy().setValue("sample-key", "stored-hash")
 

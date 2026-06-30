@@ -1,6 +1,6 @@
 from core.constant.elastic_ip_pool_constant import (
-    KEY_VAL_DUMMY_PROXY_HASH_SOURCE_STR,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
+    KEY_VAL_DUMMY_PROXY_VALUE_STR,
 )
 from core.helper.string_hash_helper import hashStringValue
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
@@ -16,12 +16,16 @@ class ElasticIpPoolService:
         elasticIpPoolRepo: ElasticIpPoolRepo | None = None,
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         keyValStoreProxy: KeyValStoreProxy | None = None,
+        keyValStoreProxyStr: str = KEY_VAL_DUMMY_PROXY_KEY_STR,
+        dummyProxyValueStr: str = KEY_VAL_DUMMY_PROXY_VALUE_STR,
     ) -> None:
         self.elasticIpPoolRepo = elasticIpPoolRepo or ElasticIpPoolRepo()
         self.elasticIpHealthCheckProxy = (
             elasticIpHealthCheckProxy or ElasticIpHealthCheckProxy()
         )
         self.keyValStoreProxy = keyValStoreProxy or KeyValStoreProxy()
+        self.keyValStoreProxyStr = keyValStoreProxyStr
+        self.dummyProxyValueStr = dummyProxyValueStr
 
     def get(self) -> str:
         storedProxyValueStr = self.check()
@@ -31,23 +35,27 @@ class ElasticIpPoolService:
         return self.update()
 
     def check(self) -> str | None:
-        resultDict = self.keyValStoreProxy.getValue(KEY_VAL_DUMMY_PROXY_KEY_STR)
+        keyValKeyStr = self.getKeyValDummyProxyKey()
+        resultDict = self.keyValStoreProxy.getValue(keyValKeyStr)
         if resultDict.get("exists") and resultDict.get("value"):
             return str(resultDict["value"])
 
         return None
 
     def update(self) -> str:
-        hashedProxyValueStr = hashStringValue(KEY_VAL_DUMMY_PROXY_HASH_SOURCE_STR)
+        keyValKeyStr = self.getKeyValDummyProxyKey()
         resultDict = self.keyValStoreProxy.setValue(
-            KEY_VAL_DUMMY_PROXY_KEY_STR,
-            hashedProxyValueStr,
+            keyValKeyStr,
+            self.dummyProxyValueStr,
         )
 
         if not resultDict.get("stored"):
             raise RuntimeError("Dummy proxy value was not stored in KeyVal.")
 
-        return str(resultDict.get("value") or hashedProxyValueStr)
+        return str(resultDict.get("value") or self.dummyProxyValueStr)
+
+    def getKeyValDummyProxyKey(self) -> str:
+        return hashStringValue(self.keyValStoreProxyStr)
 
     def getAvailableResource(self) -> dict | None:
         """Select a usable proxy/IP resource once business rules are implemented."""

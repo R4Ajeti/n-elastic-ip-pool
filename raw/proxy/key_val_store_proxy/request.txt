@@ -3,7 +3,8 @@ Target URL:
 - https://api.keyval.org/set/{KEY}/{VALUE}
 HTTP method: GET
 Required headers:
-- Accept: text/plain
+- Accept: application/json, text/plain
+- User-Agent: n-elastic-ip-pool/0.1
 Authentication: None. KeyVal REST URL values are public, so never send secrets or real proxy credentials.
 
-This request documents the KeyValStoreProxy calls used by the service layer. The service sends only a hashed safe dummy proxy value. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.
+This request documents the KeyValStoreProxy calls used by the service layer. The service hashes the configured KeyVal key and sends only safe dummy proxy data. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.

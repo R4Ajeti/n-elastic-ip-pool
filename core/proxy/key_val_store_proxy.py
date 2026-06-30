@@ -1,4 +1,6 @@
+import json
 from http.client import HTTPException
+from json import JSONDecodeError
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -6,6 +8,7 @@ from urllib.request import Request, urlopen
 from core.constant.elastic_ip_pool_constant import (
     DEFAULT_TIMEOUT_SECOND_INT,
     KEY_VAL_API_BASE_URL_STR,
+    KEY_VAL_USER_AGENT_STR,
 )
 
 
@@ -28,7 +31,7 @@ class KeyValStoreProxy:
         """Read a value from KeyVal and return normalized internal data."""
         try:
             responseTextStr, statusCodeInt = self._sendGetRequest(
-                self._buildGetUrl(keyStr),
+                self.buildGetUrl(keyStr),
             )
         except HTTPError as error:
             if error.code == 404:
@@ -43,10 +46,12 @@ class KeyValStoreProxy:
                 f"KeyVal get request failed with status {error.code}.",
             ) from error
 
+        valueStr = self._extractValueFromResponse(responseTextStr)
+
         return {
             "key": keyStr,
-            "exists": bool(responseTextStr),
-            "value": responseTextStr or None,
+            "exists": bool(valueStr),
+            "value": valueStr,
             "status_code": statusCodeInt,
         }
 
@@ -54,26 +59,28 @@ class KeyValStoreProxy:
         """Store a value in KeyVal and return normalized internal data."""
         try:
             responseTextStr, statusCodeInt = self._sendGetRequest(
-                self._buildSetUrl(keyStr, valueStr),
+                self.buildSetUrl(keyStr, valueStr),
             )
         except HTTPError as error:
             raise KeyValStoreProxyError(
                 f"KeyVal set request failed with status {error.code}.",
             ) from error
 
+        responseValueStr = self._extractValueFromResponse(responseTextStr)
+
         return {
             "key": keyStr,
             "stored": 200 <= statusCodeInt < 300,
             "value": valueStr,
-            "response_value": responseTextStr or None,
+            "response_value": responseValueStr,
             "status_code": statusCodeInt,
         }
 
-    def _buildGetUrl(self, keyStr: str) -> str:
+    def buildGetUrl(self, keyStr: str) -> str:
         encodedKeyStr = quote(keyStr, safe="")
         return f"{self.baseUrlStr}/get/{encodedKeyStr}"
 
-    def _buildSetUrl(self, keyStr: str, valueStr: str) -> str:
+    def buildSetUrl(self, keyStr: str, valueStr: str) -> str:
         encodedKeyStr = quote(keyStr, safe="")
         encodedValueStr = quote(valueStr, safe="")
         return f"{self.baseUrlStr}/set/{encodedKeyStr}/{encodedValueStr}"
@@ -82,7 +89,10 @@ class KeyValStoreProxy:
         request = Request(
             urlStr,
             method="GET",
-            headers={"Accept": "text/plain"},
+            headers={
+                "Accept": "application/json, text/plain",
+                "User-Agent": KEY_VAL_USER_AGENT_STR,
+            },
         )
 
         try:
@@ -95,3 +105,21 @@ class KeyValStoreProxy:
             raise KeyValStoreProxyError("KeyVal request failed.") from error
 
         return responseTextStr, statusCodeInt
+
+    def _extractValueFromResponse(self, responseTextStr: str) -> str | None:
+        if not responseTextStr:
+            return None
+
+        try:
+            responseDict = json.loads(responseTextStr)
+        except JSONDecodeError:
+            return responseTextStr
+
+        if not isinstance(responseDict, dict):
+            return responseTextStr
+
+        valueStr = responseDict.get("val")
+        if valueStr is None:
+            return responseTextStr
+
+        return str(valueStr)
