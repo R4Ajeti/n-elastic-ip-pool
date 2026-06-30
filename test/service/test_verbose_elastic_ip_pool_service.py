@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from core.constant.elastic_ip_pool_constant import LOGGER_LEVEL_ENV_NAME_STR
 from core.helper.string_hash_helper import hashStringValue
 from core.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
 
@@ -77,7 +78,7 @@ class FakeWorkingElasticIpHealthCheckProxy:
 
 
 class VerboseElasticIpPoolServiceTest(unittest.TestCase):
-    def testRunUsesConstructorKeySourceAndStoresEmptyProxyListWhenNoneWork(self) -> None:
+    def testRunDefaultsToInfoAndDoesNotSaveWhenNoneWork(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
         service = VerboseElasticIpPoolService(
             keyValStoreProxyStr="custom-key-source",
@@ -98,13 +99,15 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             " ".join(str(arg) for arg in call.args)
             for call in printMock.call_args_list
         )
-        self.assertIn("[proxy_scrape.fetch] raw proxy 1: proxy-one.example.net:8080", printedTextStr)
-        self.assertIn("[service.parseProxyCandidateList] valid proxy 1: proxy-one.example.net:8080", printedTextStr)
-        self.assertIn("[service.testProxy] testing proxy: proxy-one.example.net:8080", printedTextStr)
-        self.assertRegex(printedTextStr, r"\[service\.search\] took \d+\.\d{3} seconds")
-        self.assertRegex(printedTextStr, r"\[manual\.run\] took \d+\.\d{3} seconds")
+        self.assertIn("[proxyscrape] returned proxy rows: 1", printedTextStr)
+        self.assertIn("[candidate] valid proxy count: 1", printedTextStr)
+        self.assertNotIn("[candidate] 1/1: proxy-one.example.net:8080", printedTextStr)
+        self.assertNotIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
+        self.assertIn("[cache] usable saved proxy: none", printedTextStr)
+        self.assertRegex(printedTextStr, r"\[discovery\] took \d+\.\d{3} seconds")
+        self.assertRegex(printedTextStr, r"\[run\] took \d+\.\d{3} seconds")
 
-    def testRunPrintsValidationPassStartsWhenProxyKeepsWorking(self) -> None:
+    def testRunInfoPrintsValidationPassSummaryWhenProxyKeepsWorking(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
         service = VerboseElasticIpPoolService(
             keyValStoreProxyStr="custom-key-source",
@@ -121,21 +124,86 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             for call in printMock.call_args_list
         )
         self.assertEqual(resultStr, "proxy-one.example.net:8080")
-        self.assertIn("[service.validateProxyCandidateList] start first pass", printedTextStr)
-        self.assertIn("[service.validateProxyCandidateList] start second pass", printedTextStr)
-        self.assertIn("[service.validateProxyCandidateList] start third pass", printedTextStr)
+        self.assertIn("[validation] first pass started", printedTextStr)
+        self.assertIn("[validation] second pass started", printedTextStr)
+        self.assertIn("[validation] third pass started", printedTextStr)
         self.assertIn(
-            "[service.validateProxyCandidateList] finish first pass; passed proxy count: 1",
+            "[validation] first pass finished; passed=1",
             printedTextStr,
         )
         self.assertIn(
-            "[service.validateProxyCandidateList] finish second pass; passed proxy count: 1",
+            "[validation] second pass finished; passed=1",
             printedTextStr,
         )
         self.assertIn(
-            "[service.validateProxyCandidateList] finish third pass; passed proxy count: 1",
+            "[validation] third pass finished; passed=1",
             printedTextStr,
         )
+        self.assertIn("[cache] stored proxy list:", printedTextStr)
+
+    def testRunDebugPrintsDetailedCandidateAndProxyTestLines(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = VerboseElasticIpPoolService(
+            keyValStoreProxyStr="custom-key-source",
+            keyValStoreProxy=keyValStoreProxy,
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+            loggerLevelStr="DEBUG",
+        )
+
+        with patch("builtins.print") as printMock:
+            service.run()
+
+        printedTextStr = "\n".join(
+            " ".join(str(arg) for arg in call.args)
+            for call in printMock.call_args_list
+        )
+        self.assertIn("[proxyscrape] request URL:", printedTextStr)
+        self.assertIn("[candidate] 1/1: proxy-one.example.net:8080", printedTextStr)
+        self.assertIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
+        self.assertIn("[validation] result:", printedTextStr)
+
+    def testRunUsesLoggerEnvironmentValue(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+
+        with patch.dict("os.environ", {LOGGER_LEVEL_ENV_NAME_STR: "debug"}):
+            service = VerboseElasticIpPoolService(
+                keyValStoreProxyStr="custom-key-source",
+                keyValStoreProxy=keyValStoreProxy,
+                elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
+                proxyScrapeProxy=FakeProxyScrapeProxy(),
+            )
+
+        with patch("builtins.print") as printMock:
+            service.run()
+
+        printedTextStr = "\n".join(
+            " ".join(str(arg) for arg in call.args)
+            for call in printMock.call_args_list
+        )
+        self.assertIn("[run] log level: DEBUG", printedTextStr)
+        self.assertIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
+
+    def testRunFallsBackToInfoForInvalidLoggerEnvironmentValue(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+
+        with patch.dict("os.environ", {LOGGER_LEVEL_ENV_NAME_STR: "trace"}):
+            service = VerboseElasticIpPoolService(
+                keyValStoreProxyStr="custom-key-source",
+                keyValStoreProxy=keyValStoreProxy,
+                elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
+                proxyScrapeProxy=FakeProxyScrapeProxy(),
+            )
+
+        with patch("builtins.print") as printMock:
+            service.run()
+
+        printedTextStr = "\n".join(
+            " ".join(str(arg) for arg in call.args)
+            for call in printMock.call_args_list
+        )
+        self.assertIn("[run] log level: INFO", printedTextStr)
+        self.assertNotIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
 
 
 if __name__ == "__main__":

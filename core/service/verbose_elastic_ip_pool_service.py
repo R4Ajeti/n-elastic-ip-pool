@@ -1,9 +1,14 @@
 import time
 
 from core.constant.elastic_ip_pool_constant import (
+    DEFAULT_LOGGER_LEVEL_STR,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
+    LOGGER_LEVEL_DEBUG_STR,
+    LOGGER_LEVEL_ENV_NAME_STR,
+    LOGGER_LEVEL_INFO_STR,
 )
+from core.helper.env_value_helper import getEnvValue
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
 from core.proxy.key_val_store_proxy import KeyValStoreProxy
 from core.proxy.proxy_scrape_proxy import ProxyScrapeProxy
@@ -20,6 +25,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         keyValStoreProxy: KeyValStoreProxy | None = None,
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
+        loggerLevelStr: str | None = None,
     ) -> None:
         super().__init__(
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
@@ -28,53 +34,51 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             keyValStoreProxyStr=keyValStoreProxyStr,
             dummyProxyValueStr=dummyProxyValueStr,
         )
+        resolvedLoggerLevelStr = loggerLevelStr or getEnvValue(
+            LOGGER_LEVEL_ENV_NAME_STR,
+            DEFAULT_LOGGER_LEVEL_STR,
+        )
+        self.loggerLevelStr = self.normalizeLoggerLevel(resolvedLoggerLevelStr)
 
     def run(self) -> str | None:
         startFloat = time.perf_counter()
         keyValKeyHashStr = self.getKeyValProxyKey()
 
-        print("=== Proxy discovery manual run ===")
-        print("KeyVal key source:", self.keyValStoreProxyStr)
-        print("KeyVal hashed key:", keyValKeyHashStr)
-        print("KeyVal get URL:", self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr))
-        print("KeyVal save URL prints only after a working proxy is found")
-        print("note: KeyVal is public, so never store credentials or private proxy data")
+        self.logInfo("=== Proxy discovery run ===")
+        self.logDebug("[run] key source:", self.keyValStoreProxyStr)
+        self.logInfo("[run] hashed storage key:", keyValKeyHashStr)
+        self.logInfo("[run] log level:", self.loggerLevelStr)
+        self.logInfo("[run] note: KeyVal is public; credentials are never stored")
 
-        print("=== service get flow ===")
         finalValueStr = self.get()
 
-        print("=== final ===")
-        print("stored KeyVal key:", keyValKeyHashStr)
-        print("stored KeyVal value:", finalValueStr)
-        print(
-            "open this URL to read it:",
-            self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr),
-        )
-        print("[manual.run] took", self.getElapsedSecondStr(startFloat), "seconds")
+        self.logInfo("[run] selected proxy:", finalValueStr or "none")
+        self.logDebug("[run] cache read URL:", self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr))
+        self.logInfo("[run] took", self.getElapsedSecondStr(startFloat), "seconds")
 
         return finalValueStr
 
     def get(self) -> str | None:
-        print("[service.get] start")
+        self.logDebug("[workflow] resolving usable proxy")
         resultStr = super().get()
-        print("[service.get] return:", resultStr)
+        self.logDebug("[workflow] result:", resultStr or "none")
         return resultStr
 
     def search(self) -> str | None:
         startFloat = time.perf_counter()
-        print("[service.search] start ProxyScrape discovery")
+        self.logInfo("[discovery] starting ProxyScrape search")
         try:
             resultStr = super().search()
-            print("[service.search] return:", resultStr)
+            self.logInfo("[discovery] fastest working proxy:", resultStr or "none")
             return resultStr
         finally:
-            print("[service.search] took", self.getElapsedSecondStr(startFloat), "seconds")
+            self.logInfo("[discovery] took", self.getElapsedSecondStr(startFloat), "seconds")
 
     def fetchProxyCandidateText(self) -> str:
         if hasattr(self.proxyScrapeProxy, "buildFetchUrl"):
-            print("[proxy_scrape.fetch] URL:", self.proxyScrapeProxy.buildFetchUrl())
+            self.logDebug("[proxyscrape] request URL:", self.proxyScrapeProxy.buildFetchUrl())
         else:
-            print("[proxy_scrape.fetch] URL: unavailable from injected proxy")
+            self.logDebug("[proxyscrape] request URL: unavailable from injected proxy")
 
         proxyCandidateTextStr = super().fetchProxyCandidateText()
         rawProxyList = [
@@ -82,39 +86,38 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             for lineStr in proxyCandidateTextStr.splitlines()
             if lineStr.strip()
         ]
-        print("[proxy_scrape.fetch] raw proxy count:", len(rawProxyList))
-        for indexInt, proxyStr in enumerate(rawProxyList, start=1):
-            print(f"[proxy_scrape.fetch] raw proxy {indexInt}:", proxyStr)
+        self.logInfo("[proxyscrape] returned proxy rows:", len(rawProxyList))
 
         return proxyCandidateTextStr
 
     def parseProxyCandidateList(self, proxyCandidateTextStr: str) -> list[str]:
         proxyCandidateList = super().parseProxyCandidateList(proxyCandidateTextStr)
-        print("[service.parseProxyCandidateList] valid proxy count:", len(proxyCandidateList))
+        self.logInfo("[candidate] valid proxy count:", len(proxyCandidateList))
         for indexInt, proxyStr in enumerate(proxyCandidateList, start=1):
-            print(f"[service.parseProxyCandidateList] valid proxy {indexInt}:", proxyStr)
+            self.logDebug(
+                f"[candidate] {indexInt}/{len(proxyCandidateList)}:",
+                proxyStr,
+            )
 
         return proxyCandidateList
 
     def testProxy(self, proxyStr: str) -> dict:
-        print("[service.testProxy] testing proxy:", proxyStr)
+        self.logDebug("[validation] testing proxy:", proxyStr)
         resultDict = super().testProxy(proxyStr)
-        print(
-            "[service.testProxy] result:",
-            {
-                "proxy": resultDict.get("proxy"),
-                "isWorking": resultDict.get("isWorking"),
-                "timingMs": resultDict.get("timingMs"),
-                "error": resultDict.get("error"),
-            },
+        self.logDebug(
+            "[validation] result:",
+            f"proxy={resultDict.get('proxy')}",
+            f"isWorking={resultDict.get('isWorking')}",
+            f"timingMs={resultDict.get('timingMs')}",
+            f"error={resultDict.get('error')}",
         )
         return resultDict
 
     def onProxyValidationPassStart(self, passNumberInt: int) -> None:
-        print(
-            "[service.validateProxyCandidateList] start",
+        self.logInfo(
+            "[validation]",
             self.getProxyValidationPassLabel(passNumberInt),
-            "pass",
+            "pass started",
         )
 
     def onProxyValidationPassFinish(
@@ -122,11 +125,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         passNumberInt: int,
         passedProxyCountInt: int,
     ) -> None:
-        print(
-            "[service.validateProxyCandidateList] finish",
+        self.logInfo(
+            "[validation]",
             self.getProxyValidationPassLabel(passNumberInt),
-            "pass; passed proxy count:",
-            passedProxyCountInt,
+            f"pass finished; passed={passedProxyCountInt}",
         )
 
     def getProxyValidationPassLabel(self, passNumberInt: int) -> str:
@@ -138,44 +140,53 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         return passLabelByNumberDict.get(passNumberInt, f"pass {passNumberInt}")
 
     def saveWorkingProxyList(self, workingProxyList: list[dict]) -> str:
-        print("[service.saveWorkingProxyList] working proxy count:", len(workingProxyList))
+        self.logInfo("[cache] working proxies selected:", len(workingProxyList))
         for indexInt, proxyDict in enumerate(workingProxyList, start=1):
-            print(
-                f"[service.saveWorkingProxyList] working proxy {indexInt}:",
-                proxyDict,
+            self.logInfo(
+                f"[cache] selected {indexInt}/{len(workingProxyList)}:",
+                f"proxy={proxyDict.get('proxy')}",
+                f"averageTimingMs={proxyDict.get('averageTimingMs')}",
+                f"successCount={proxyDict.get('successCount')}",
             )
 
         resultStr = super().saveWorkingProxyList(workingProxyList)
-        print("[service.saveWorkingProxyList] stored compact proxy JSON:", resultStr)
+        self.logInfo("[cache] stored proxy list:", resultStr)
         return resultStr
 
     def check(self) -> str | None:
-        print("[service.check] checking KeyVal for existing proxy list")
-        keyValKeyStr = self.getKeyValProxyKey()
-        print("[service.check] KeyVal key:", keyValKeyStr)
-        print(
-            "[service.check] KeyVal get URL:",
-            self.keyValStoreProxy.buildGetUrl(keyValKeyStr),
-        )
+        self.logInfo("[cache] checking saved proxy list")
         resultStr = super().check()
-        print("[service.check] best working saved proxy:", resultStr)
+        self.logInfo("[cache] usable saved proxy:", resultStr or "none")
         return resultStr
 
     def update(self, valueStr: str) -> str:
-        print("[service.update] storing proxy list JSON:", valueStr)
-        print("[service.update] hashing KeyVal key before save")
         keyValKeyStr = self.getKeyValProxyKey()
-        print("[service.update] KeyVal key:", keyValKeyStr)
-        print(
-            "[service.update] KeyVal save URL:",
+        self.logInfo("[cache] saving proxy list:", valueStr)
+        self.logDebug(
+            "[cache] save URL:",
             self.keyValStoreProxy.buildSetUrl(
                 keyValKeyStr,
                 valueStr,
             ),
         )
         resultStr = super().update(valueStr)
-        print("[service.update] saved proxy list JSON:", resultStr)
+        self.logInfo("[cache] save complete")
         return resultStr
 
     def getElapsedSecondStr(self, startFloat: float) -> str:
         return f"{max(0.0, time.perf_counter() - startFloat):.3f}"
+
+    def logInfo(self, *valueTuple) -> None:
+        if self.loggerLevelStr in {LOGGER_LEVEL_INFO_STR, LOGGER_LEVEL_DEBUG_STR}:
+            print(*valueTuple)
+
+    def logDebug(self, *valueTuple) -> None:
+        if self.loggerLevelStr == LOGGER_LEVEL_DEBUG_STR:
+            print(*valueTuple)
+
+    def normalizeLoggerLevel(self, loggerLevelStr: str) -> str:
+        normalizedLoggerLevelStr = str(loggerLevelStr or DEFAULT_LOGGER_LEVEL_STR).upper()
+        if normalizedLoggerLevelStr == LOGGER_LEVEL_DEBUG_STR:
+            return LOGGER_LEVEL_DEBUG_STR
+
+        return LOGGER_LEVEL_INFO_STR
