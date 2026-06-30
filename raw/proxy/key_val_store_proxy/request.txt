@@ -1,9 +1,9 @@
-Target URL: https://key-value-store.example.com/v1/value/{key}
-HTTP method: GET or PUT
+Target URL:
+- https://api.keyval.org/get/{KEY}
+- https://api.keyval.org/set/{KEY}/{VALUE}
+HTTP method: GET
 Required headers:
-- Accept: application/json
-- Content-Type: application/json
-- Authorization: Bearer <REDACTED_TOKEN>
-Authentication: The token above is a placeholder only. Do not store real provider tokens in raw examples.
+- Accept: text/plain
+Authentication: None. KeyVal REST URL values are public, so never send secrets or real proxy credentials.
 
-This request documents the future key/value store call made by KeyValStoreProxy. It should read or write normalized pool state for a service-approved key without exposing storage details to the service layer.
+This request documents the KeyValStoreProxy calls used by the service layer. The service sends only a hashed safe dummy proxy value. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.
