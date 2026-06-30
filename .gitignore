@@ -272,3 +272,4 @@ terraform.tfstate.*
 !AGENTS.md
 !skill/
 !skill/**/SKILL.md
+commands.txt

@@ -1,0 +1,22 @@
+# Latest Python checked from python.org on 2026-07-01:
+# Python 3.14.6
+#
+# Python itself is not installed by pip requirements files.
+#
+# Runtime dependencies:
+# None. The application code uses only the Python standard library.
+#
+# Scanned core/ imports on 2026-07-01.
+# These are Python standard-library modules and must not be installed with pip:
+# datetime
+# hashlib
+# http
+# json
+# os
+# pathlib
+# re
+# time
+# urllib
+
+# Development/test runner used by commands.txt.
+pytest==9.1.1
