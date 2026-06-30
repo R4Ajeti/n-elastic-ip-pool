@@ -4,6 +4,6 @@
   },
   "set_value": {
     "key": "a9362079373ac299322a9a8db4d94b5b65c392e1a188d30f5f899fb17ccb4a65",
-    "value": "[{\"proxy\":\"proxy-one.example.net:8080\",\"averageTimingMs\":120,\"successCount\":3,\"lastCheckedAt\":\"2026-01-01T00:00:00Z\"}]"
+    "value": "[\"proxy-one.example.net:8080\"]"
   }
 }

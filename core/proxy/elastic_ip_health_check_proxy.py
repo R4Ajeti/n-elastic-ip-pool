@@ -5,7 +5,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
 from core.constant.elastic_ip_pool_constant import (
-    DEFAULT_TIMEOUT_SECOND_INT,
+    PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_TEST_TARGET_URL_STR,
     PROXY_TEST_USER_AGENT_STR,
 )
@@ -18,10 +18,15 @@ class ElasticIpHealthCheckProxy:
     def __init__(
         self,
         targetUrlStr: str = PROXY_TEST_TARGET_URL_STR,
-        timeoutSecondInt: int = DEFAULT_TIMEOUT_SECOND_INT,
+        timeoutSecondInt: int | None = None,
+        timeoutMillisecondInt: int = PROXY_MAX_TIMING_MILLISECOND_INT,
     ) -> None:
         self.targetUrlStr = targetUrlStr
-        self.timeoutSecondInt = timeoutSecondInt
+        self.timeoutSecondFloat = (
+            float(timeoutSecondInt)
+            if timeoutSecondInt is not None
+            else max(1, timeoutMillisecondInt) / 1000
+        )
 
     def checkHealth(self, proxyResourceDict: dict) -> dict:
         """Check a proxy resource dictionary using its proxy or ip_address value."""
@@ -66,7 +71,7 @@ class ElasticIpHealthCheckProxy:
 
         startFloat = time.perf_counter()
         try:
-            with opener.open(request, timeout=self.timeoutSecondInt) as response:
+            with opener.open(request, timeout=self.timeoutSecondFloat) as response:
                 response.read(512)
                 statusCodeInt = response.getcode()
         except HTTPError as error:

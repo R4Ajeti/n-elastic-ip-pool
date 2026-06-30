@@ -1,5 +1,5 @@
 {
   "proxy": "proxy-one.example.net:8080",
   "targetUrl": "https://api.ipify.org?format=json",
-  "timeoutSecond": 10
+  "timeoutMillisecond": 2000
 }

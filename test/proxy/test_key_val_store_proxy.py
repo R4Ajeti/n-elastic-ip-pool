@@ -108,8 +108,40 @@ class KeyValStoreProxyTest(unittest.TestCase):
                 "stored": True,
                 "value": "stored-hash",
                 "response_value": "stored-hash",
+                "response_status": "SUCCESS",
                 "status_code": 200,
             },
+        )
+
+    def testSetValueMarksProviderFailureAsNotStored(self) -> None:
+        with patch(
+            "core.proxy.key_val_store_proxy.urlopen",
+            return_value=FakeHttpResponse(
+                '{"status":"-KEY-OR-VALUE-TOO-LONG-"}',
+            ),
+        ):
+            resultDict = KeyValStoreProxy().setValue("sample-key", '["proxy-one.example.net:8080"]')
+
+        self.assertFalse(resultDict["stored"])
+        self.assertEqual(resultDict["response_status"], "-KEY-OR-VALUE-TOO-LONG-")
+
+    def testBuildSetUrlUrlEncodesProxyListJson(self) -> None:
+        resultStr = KeyValStoreProxy().buildSetUrl(
+            "sample-key",
+            '["proxy-one.example.net:8080"]',
+        )
+
+        self.assertEqual(
+            resultStr,
+            f"{KEY_VAL_API_BASE_URL_STR}/set/sample-key/%5B%22proxy-one.example.net%3A8080%22%5D",
+        )
+
+    def testBuildSetUrlUrlEncodesEmptyProxyList(self) -> None:
+        resultStr = KeyValStoreProxy().buildSetUrl("sample-key", "[]")
+
+        self.assertEqual(
+            resultStr,
+            f"{KEY_VAL_API_BASE_URL_STR}/set/sample-key/%5B%5D",
         )
 
 

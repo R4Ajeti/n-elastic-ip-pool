@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 
+from core.constant.elastic_ip_pool_constant import PROXY_MAX_TIMING_MILLISECOND_INT
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
 
 
@@ -66,6 +67,23 @@ class ElasticIpHealthCheckProxyTest(unittest.TestCase):
         self.assertFalse(resultDict["isWorking"])
         self.assertEqual(resultDict["error"], "TimeoutError")
         self.assertIsNone(resultDict["statusCode"])
+        self.assertEqual(
+            fakeOpener.timeoutSecondInt,
+            PROXY_MAX_TIMING_MILLISECOND_INT / 1000,
+        )
+
+    def testTestProxyUsesMillisecondTimeoutOverride(self) -> None:
+        fakeOpener = FakeOpener(FakeHttpResponse(200))
+
+        with patch(
+            "core.proxy.elastic_ip_health_check_proxy.build_opener",
+            return_value=fakeOpener,
+        ):
+            ElasticIpHealthCheckProxy(timeoutMillisecondInt=1500).testProxy(
+                "proxy-one.example.net:8080",
+            )
+
+        self.assertEqual(fakeOpener.timeoutSecondInt, 1.5)
 
     def testTestProxyRejectsInvalidProxyFormatWithoutNetwork(self) -> None:
         with patch("core.proxy.elastic_ip_health_check_proxy.build_opener") as openerMock:

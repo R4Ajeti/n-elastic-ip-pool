@@ -67,12 +67,17 @@ class KeyValStoreProxy:
             ) from error
 
         responseValueStr = self._extractValueFromResponse(responseTextStr)
+        responseStatusStr = self._extractStatusFromResponse(responseTextStr)
+        storedBool = 200 <= statusCodeInt < 300
+        if responseStatusStr:
+            storedBool = storedBool and responseStatusStr == "SUCCESS"
 
         return {
             "key": keyStr,
-            "stored": 200 <= statusCodeInt < 300,
+            "stored": storedBool,
             "value": valueStr,
             "response_value": responseValueStr,
+            "response_status": responseStatusStr,
             "status_code": statusCodeInt,
         }
 
@@ -110,11 +115,7 @@ class KeyValStoreProxy:
         if not responseTextStr:
             return None
 
-        try:
-            responseDict = json.loads(responseTextStr)
-        except JSONDecodeError:
-            return responseTextStr
-
+        responseDict = self._extractDictFromResponse(responseTextStr)
         if not isinstance(responseDict, dict):
             return responseTextStr
 
@@ -123,3 +124,25 @@ class KeyValStoreProxy:
             return responseTextStr
 
         return str(valueStr)
+
+    def _extractStatusFromResponse(self, responseTextStr: str) -> str | None:
+        responseDict = self._extractDictFromResponse(responseTextStr)
+        if not isinstance(responseDict, dict):
+            return None
+
+        statusStr = responseDict.get("status")
+        if statusStr is None:
+            return None
+
+        return str(statusStr)
+
+    def _extractDictFromResponse(self, responseTextStr: str) -> dict | None:
+        try:
+            responseDict = json.loads(responseTextStr)
+        except JSONDecodeError:
+            return None
+
+        if not isinstance(responseDict, dict):
+            return None
+
+        return responseDict

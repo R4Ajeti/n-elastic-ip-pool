@@ -6,6 +6,8 @@ Required headers:
 Proxy configuration:
 - http: http://proxy-one.example.net:8080
 - https: http://proxy-one.example.net:8080
+Timeout:
+- 2000 milliseconds by default, from PROXY_MAX_TIMING_MILLISECOND_INT
 Authentication: None. Proxies with embedded usernames, passwords, tokens, or session data are rejected by the formatter.
 
 This request documents ElasticIpHealthCheckProxy testing whether a candidate proxy can reach the configured health-check endpoint. The proxy layer performs the HTTP connectivity check and returns a normalized result. The service layer decides retry count, ranking, saving, and whether a proxy is usable.

@@ -2,9 +2,10 @@ import json
 from json import JSONDecodeError
 
 from core.constant.elastic_ip_pool_constant import (
-    DEFAULT_TIMEOUT_SECOND_INT,
+    KEY_VAL_MAX_SAVED_PROXY_COUNT_INT,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
+    PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
 from core.helper.proxy_address_format_helper import normalizeProxyAddress
@@ -27,6 +28,7 @@ class ElasticIpPoolService:
         keyValStoreProxyStr: str = KEY_VAL_DUMMY_PROXY_KEY_STR,
         dummyProxyValueStr: str = KEY_VAL_DUMMY_PROXY_VALUE_STR,
         proxyValidationSuccessCountInt: int = PROXY_VALIDATION_SUCCESS_COUNT_INT,
+        proxyMaxTimingMillisecondInt: int = PROXY_MAX_TIMING_MILLISECOND_INT,
     ) -> None:
         self.elasticIpPoolRepo = elasticIpPoolRepo or ElasticIpPoolRepo()
         self.elasticIpHealthCheckProxy = (
@@ -37,6 +39,7 @@ class ElasticIpPoolService:
         self.keyValStoreProxyStr = keyValStoreProxyStr
         self.dummyProxyValueStr = dummyProxyValueStr
         self.proxyValidationSuccessCountInt = max(1, proxyValidationSuccessCountInt)
+        self.proxyMaxTimingMillisecondInt = max(1, proxyMaxTimingMillisecondInt)
 
     def get(self) -> str | None:
         storedProxyValueStr = self.check()
@@ -62,7 +65,7 @@ class ElasticIpPoolService:
         workingProxyList = []
         for savedProxyDict in savedProxyList:
             testResultDict = self.testProxy(str(savedProxyDict["proxy"]))
-            if testResultDict.get("isWorking"):
+            if self.isProxyTestResultUsable(testResultDict):
                 workingProxyList.append(
                     self.buildWorkingProxyRecord(
                         str(testResultDict["proxy"]),
@@ -81,30 +84,30 @@ class ElasticIpPoolService:
         proxyCandidateTextStr = self.fetchProxyCandidateText()
         proxyCandidateList = self.parseProxyCandidateList(proxyCandidateTextStr)
         if not proxyCandidateList:
-            self.saveWorkingProxyList([])
             return None
 
         workingProxyList = self.validateProxyCandidateList(proxyCandidateList)
         rankedProxyList = self.rankWorkingProxyList(workingProxyList)
         if not rankedProxyList:
-            self.saveWorkingProxyList([])
             return None
 
         self.saveWorkingProxyList(rankedProxyList)
         return str(rankedProxyList[0]["proxy"])
 
-    def update(self, valueStr: str | None = None) -> str:
+    def update(self, valueStr: str) -> str:
+        if valueStr is None:
+            raise ValueError("valueStr is required before saving to KeyVal.")
+
         keyValKeyStr = self.getKeyValProxyKey()
-        valueToStoreStr = valueStr if valueStr is not None else "[]"
         resultDict = self.keyValStoreProxy.setValue(
             keyValKeyStr,
-            valueToStoreStr,
+            valueStr,
         )
 
         if not resultDict.get("stored"):
             raise RuntimeError("Proxy value was not stored in KeyVal.")
 
-        return str(resultDict.get("value") or valueToStoreStr)
+        return str(resultDict.get("value") or valueStr)
 
     def fetchProxyCandidateText(self) -> str:
         try:
@@ -174,41 +177,63 @@ class ElasticIpPoolService:
         return proxyList
 
     def validateProxyCandidateList(self, proxyCandidateList: list[str]) -> list[dict]:
-        firstPassProxyCheckList = []
+        proxyCheckByProxyDict = {
+            proxyStr: {
+                "proxy": proxyStr,
+                "timingMsList": [],
+                "lastCheckedAt": "",
+            }
+            for proxyStr in proxyCandidateList
+        }
 
-        for proxyStr in proxyCandidateList:
-            testResultDict = self.testProxy(proxyStr)
-            if not testResultDict.get("isWorking"):
-                continue
+        for passNumberInt in range(1, self.proxyValidationSuccessCountInt + 1):
+            if not proxyCheckByProxyDict:
+                break
 
-            firstPassProxyCheckList.append(
-                {
-                    "proxy": str(testResultDict["proxy"]),
-                    "timingMsList": [self.getTimingMsInt(testResultDict)],
-                    "lastCheckedAt": str(testResultDict["checkedAt"]),
-                },
+            self.onProxyValidationPassStart(passNumberInt)
+            nextProxyCheckByProxyDict = {}
+
+            for proxyStr, proxyCheckDict in proxyCheckByProxyDict.items():
+                testResultDict = self.testProxy(proxyStr)
+                if not self.isProxyTestResultUsable(testResultDict):
+                    continue
+
+                normalizedProxyStr = str(testResultDict["proxy"])
+                proxyCheckDict["proxy"] = normalizedProxyStr
+                proxyCheckDict["timingMsList"].append(self.getTimingMsInt(testResultDict))
+                proxyCheckDict["lastCheckedAt"] = str(testResultDict["checkedAt"])
+                nextProxyCheckByProxyDict[normalizedProxyStr] = proxyCheckDict
+
+            self.onProxyValidationPassFinish(
+                passNumberInt,
+                len(nextProxyCheckByProxyDict),
             )
+            proxyCheckByProxyDict = nextProxyCheckByProxyDict
 
-        workingProxyList = []
-        for proxyCheckDict in firstPassProxyCheckList:
-            retestProxyCheckDict = self.retestProxyUntilReady(proxyCheckDict)
-            if not retestProxyCheckDict:
-                continue
-
-            workingProxyList.append(
-                self.buildWorkingProxyRecord(
-                    str(retestProxyCheckDict["proxy"]),
-                    list(retestProxyCheckDict["timingMsList"]),
-                    str(retestProxyCheckDict["lastCheckedAt"]),
-                ),
+        return [
+            self.buildWorkingProxyRecord(
+                str(proxyCheckDict["proxy"]),
+                list(proxyCheckDict["timingMsList"]),
+                str(proxyCheckDict["lastCheckedAt"]),
             )
+            for proxyCheckDict in proxyCheckByProxyDict.values()
+            if len(proxyCheckDict["timingMsList"]) >= self.proxyValidationSuccessCountInt
+        ]
 
-        return workingProxyList
+    def onProxyValidationPassStart(self, passNumberInt: int) -> None:
+        return None
+
+    def onProxyValidationPassFinish(
+        self,
+        passNumberInt: int,
+        passedProxyCountInt: int,
+    ) -> None:
+        return None
 
     def retestProxyUntilReady(self, proxyCheckDict: dict) -> dict | None:
         while len(proxyCheckDict["timingMsList"]) < self.proxyValidationSuccessCountInt:
             testResultDict = self.testProxy(str(proxyCheckDict["proxy"]))
-            if not testResultDict.get("isWorking"):
+            if not self.isProxyTestResultUsable(testResultDict):
                 return None
 
             proxyCheckDict["timingMsList"].append(self.getTimingMsInt(testResultDict))
@@ -218,6 +243,12 @@ class ElasticIpPoolService:
 
     def testProxy(self, proxyStr: str) -> dict:
         return self.elasticIpHealthCheckProxy.testProxy(proxyStr)
+
+    def isProxyTestResultUsable(self, testResultDict: dict) -> bool:
+        if not testResultDict.get("isWorking"):
+            return False
+
+        return self.getTimingMsInt(testResultDict) <= self.proxyMaxTimingMillisecondInt
 
     def rankWorkingProxyList(self, workingProxyList: list[dict]) -> list[dict]:
         return sorted(
@@ -229,12 +260,16 @@ class ElasticIpPoolService:
         )
 
     def saveWorkingProxyList(self, workingProxyList: list[dict]) -> str:
-        # Proxy addresses stay readable because the app must reuse them; credentials are rejected earlier.
+        # Store reusable proxy values only; full ranking metadata is too long for KeyVal path writes.
+        proxyValueList = [
+            str(workingProxyDict["proxy"])
+            for workingProxyDict in workingProxyList[:KEY_VAL_MAX_SAVED_PROXY_COUNT_INT]
+            if workingProxyDict.get("proxy")
+        ]
         valueStr = json.dumps(
-            workingProxyList,
+            proxyValueList,
             ensure_ascii=True,
             separators=(",", ":"),
-            sort_keys=True,
         )
         return self.update(valueStr)
 
@@ -258,7 +293,7 @@ class ElasticIpPoolService:
         if isinstance(timingMsValue, (int, float)):
             return max(0, int(round(timingMsValue)))
 
-        return DEFAULT_TIMEOUT_SECOND_INT * 1000
+        return self.proxyMaxTimingMillisecondInt + 1
 
     def getKeyValProxyKey(self) -> str:
         return hashStringValue(self.keyValStoreProxyStr)

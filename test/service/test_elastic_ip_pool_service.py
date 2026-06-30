@@ -3,7 +3,6 @@ import unittest
 
 from core.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
-    KEY_VAL_DUMMY_PROXY_VALUE_STR,
 )
 from core.helper.string_hash_helper import hashStringValue
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
@@ -318,7 +317,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertEqual(resultStr, "proxy-two.example.net:8080")
         self.assertEqual(len(savedList), 1)
-        self.assertEqual(savedList[0]["successCount"], 3)
+        self.assertEqual(savedList[0], "proxy-two.example.net:8080")
 
     def testRankWorkingProxyListSortsAverageTimingAscending(self) -> None:
         service = ElasticIpPoolService(
@@ -362,6 +361,25 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertEqual(resultStr, "proxy-fast.example.net:8080")
 
+    def testSearchRejectsProxySlowerThanMaxTiming(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-slow.example.net:8080": [
+                        buildTestResult("proxy-slow.example.net:8080", True, 5001),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy("proxy-slow.example.net:8080\n"),
+        )
+
+        resultStr = service.search()
+
+        self.assertIsNone(resultStr)
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+
     def testSearchHandlesEmptyProxyScrapeResponse(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
         service = ElasticIpPoolService(
@@ -374,15 +392,19 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertIsNone(resultStr)
         self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
 
     def testSearchHandlesProxyScrapeApiFailure(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
         service = ElasticIpPoolService(
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
-            keyValStoreProxy=FakeKeyValStoreProxy(),
+            keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy(error=ProxyScrapeProxyError("down")),
         )
 
         self.assertIsNone(service.search())
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
 
     def testGetHandlesCorruptedKeyValData(self) -> None:
         service = ElasticIpPoolService(
@@ -446,20 +468,16 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertIsNone(resultStr)
         self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
 
-    def testUpdateStoresCustomDummyProxyValueAtHashedKey(self) -> None:
-        expectedKeyStr = hashStringValue(KEY_VAL_DUMMY_PROXY_KEY_STR)
+    def testUpdateRequiresExplicitProxyListValue(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
-        service = ElasticIpPoolService(
-            keyValStoreProxy=keyValStoreProxy,
-            dummyProxyValueStr="http://proxy-one.example.net:8080",
-        )
+        service = ElasticIpPoolService(keyValStoreProxy=keyValStoreProxy)
 
-        resultStr = service.update()
+        with self.assertRaises(ValueError):
+            service.update(None)
 
-        self.assertEqual(resultStr, "http://proxy-one.example.net:8080")
-        self.assertEqual(keyValStoreProxy.setKeyStr, expectedKeyStr)
-        self.assertEqual(keyValStoreProxy.setValueStr, "http://proxy-one.example.net:8080")
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
 
     def testUpdateUsesCustomKeyValStoreProxySourceString(self) -> None:
         expectedKeyStr = hashStringValue("custom-key-source")
@@ -467,14 +485,16 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         service = ElasticIpPoolService(
             keyValStoreProxy=keyValStoreProxy,
             keyValStoreProxyStr="custom-key-source",
-            dummyProxyValueStr=KEY_VAL_DUMMY_PROXY_VALUE_STR,
         )
 
-        resultStr = service.update()
+        resultStr = service.update('["proxy-one.example.net:8080"]')
 
-        self.assertEqual(resultStr, KEY_VAL_DUMMY_PROXY_VALUE_STR)
+        self.assertEqual(resultStr, '["proxy-one.example.net:8080"]')
         self.assertEqual(keyValStoreProxy.setKeyStr, expectedKeyStr)
-        self.assertEqual(keyValStoreProxy.setValueStr, KEY_VAL_DUMMY_PROXY_VALUE_STR)
+        self.assertEqual(
+            keyValStoreProxy.setValueStr,
+            '["proxy-one.example.net:8080"]',
+        )
 
     @unittest.skip("Placeholder until Elastic IP pool selection rules are implemented.")
     def testGetAvailableResourceReturnsOnlyUsableResource(self) -> None:

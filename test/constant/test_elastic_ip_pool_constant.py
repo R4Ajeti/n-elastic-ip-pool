@@ -35,6 +35,10 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
             elastic_ip_pool_constant.PROXY_VALIDATION_SUCCESS_COUNT_INT,
             int,
         )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.PROXY_MAX_TIMING_MILLISECOND_INT,
+            int,
+        )
 
 
 if __name__ == "__main__":
