@@ -1,0 +1,9 @@
+Target URL: https://key-value-store.example.com/v1/value/{key}
+HTTP method: GET or PUT
+Required headers:
+- Accept: application/json
+- Content-Type: application/json
+- Authorization: Bearer <REDACTED_TOKEN>
+Authentication: The token above is a placeholder only. Do not store real provider tokens in raw examples.
+
+This request documents the future key/value store call made by KeyValStoreProxy. It should read or write normalized pool state for a service-approved key without exposing storage details to the service layer.

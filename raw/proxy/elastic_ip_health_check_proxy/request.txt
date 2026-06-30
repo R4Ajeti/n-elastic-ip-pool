@@ -1,0 +1,7 @@
+Target URL: https://example.com/health
+HTTP method: GET
+Required headers:
+- Accept: application/json
+Authentication: None for the placeholder example. Use only safe placeholder values when provider authentication is added later.
+
+This request documents the future health-check call made by ElasticIpHealthCheckProxy. It should check whether a proxy/IP resource can reach the configured health-check endpoint and return a normalized result to the service layer.

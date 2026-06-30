@@ -40,21 +40,34 @@ test/
 ## Expected Placeholder Files
 
 ```text
-core/constant/base_proxy_constant.py
-core/helper/proxy_format_helper.py
-core/proxy/proxy_client.py
-core/service/proxy_service.py
-core/repo/proxy_repo.py
+core/constant/elastic_ip_pool_constant.py
+core/helper/ip_address_format_helper.py
+core/proxy/elastic_ip_health_check_proxy.py
+core/proxy/key_val_store_proxy.py
+core/service/elastic_ip_pool_service.py
+core/repo/elastic_ip_pool_repo.py
 ```
 
 ## Expected Placeholder Test Files
 
 ```text
-test/constant/test_base_proxy_constant.py
-test/helper/test_proxy_format_helper.py
-test/proxy/test_proxy_client.py
-test/service/test_proxy_service.py
-test/repo/test_proxy_repo.py
+test/constant/test_elastic_ip_pool_constant.py
+test/helper/test_ip_address_format_helper.py
+test/proxy/test_elastic_ip_health_check_proxy.py
+test/proxy/test_key_val_store_proxy.py
+test/service/test_elastic_ip_pool_service.py
+test/repo/test_elastic_ip_pool_repo.py
+```
+
+## Expected Raw Proxy Example Files
+
+```text
+raw/proxy/elastic_ip_health_check_proxy/request.txt
+raw/proxy/elastic_ip_health_check_proxy/json/input.json
+raw/proxy/elastic_ip_health_check_proxy/json/output.json
+raw/proxy/key_val_store_proxy/request.txt
+raw/proxy/key_val_store_proxy/json/input.json
+raw/proxy/key_val_store_proxy/json/output.json
 ```
 
 ## Output Requirement

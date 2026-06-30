@@ -37,9 +37,9 @@ Review architecture boundaries in `n_elastic_ip_pool`.
 ### service
 
 - Contains business logic.
-- Coordinates repo and proxy clients.
+- Coordinates repo and proxy classes.
 - Decides which proxy is usable.
-- Decides when to retry, fail, blacklist, or return no proxy.
+- Decides when to retry, mark failed, mark unavailable, or return no proxy.
 - Does not contain raw storage/database logic.
 - Does not directly expose provider-specific implementation details.
 

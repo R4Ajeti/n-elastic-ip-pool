@@ -77,6 +77,12 @@ test/
 
 Initial tests may be placeholders until implementation is completed.
 
+Run the current test suite from the repository root:
+
+```bash
+python3 -m unittest discover -s test -p "test_*.py"
+```
+
 ## 🔐 Safety
 
 This project must never commit:

@@ -1,0 +1,8 @@
+{
+  "key": "elastic-ip-pool/sample-resource",
+  "value": {
+    "proxy_resource_id": "eip-sample-001",
+    "status": "active"
+  },
+  "ttl_second": 3600
+}

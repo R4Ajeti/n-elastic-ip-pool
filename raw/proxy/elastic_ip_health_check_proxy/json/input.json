@@ -1,0 +1,6 @@
+{
+  "proxy_resource_id": "eip-sample-001",
+  "ip_address": "203.0.113.10",
+  "health_check_url": "https://example.com/health",
+  "timeout_second": 10
+}

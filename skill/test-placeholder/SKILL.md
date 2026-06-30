@@ -32,13 +32,14 @@ test/
 
 ## Example Test Intent
 
-- proxy service should return only working proxy
-- proxy service should skip failed proxy
-- proxy service should mark failed proxy
-- repo should save proxy status
-- repo should return active proxy list
-- proxy client should validate proxy health later
-- helper should validate proxy format later
+- elastic IP pool service should return only working proxy resources
+- elastic IP pool service should skip failed proxy resources
+- elastic IP pool service should mark failed proxy resources
+- elastic IP pool repo should save resource status
+- elastic IP pool repo should return active resource list
+- elastic IP health check proxy should validate proxy health later
+- key val store proxy should persist provider state later
+- helper should validate IP address format later
 
 ## Output Requirement
 
