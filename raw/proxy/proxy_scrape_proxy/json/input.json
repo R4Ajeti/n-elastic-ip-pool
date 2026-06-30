@@ -1,0 +1,12 @@
+{
+  "baseUrl": "https://api.proxyscrape.com",
+  "query": {
+    "request": "getproxies",
+    "proxytype": "all",
+    "timeout": 300,
+    "country": "all",
+    "ssl": "yes",
+    "anonymity": "elite"
+  },
+  "timeoutSecond": 10
+}

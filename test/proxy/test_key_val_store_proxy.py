@@ -1,3 +1,4 @@
+import io
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -65,7 +66,7 @@ class KeyValStoreProxyTest(unittest.TestCase):
             404,
             "Not Found",
             None,
-            None,
+            io.BytesIO(b""),
         )
 
         with patch(
@@ -73,6 +74,7 @@ class KeyValStoreProxyTest(unittest.TestCase):
             side_effect=notFoundError,
         ):
             resultDict = KeyValStoreProxy().getValue("missing-key")
+        notFoundError.close()
 
         self.assertEqual(
             resultDict,

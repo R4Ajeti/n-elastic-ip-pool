@@ -18,7 +18,7 @@ def main() -> None:
 
     service = VerboseElasticIpPoolService(
         # keyValStoreProxyStr=keyValStoreProxyStr,
-        dummyProxyValueStr=SAFE_HARDCODED_DUMMY_PROXY_STR,
+        # dummyProxyValueStr=SAFE_HARDCODED_DUMMY_PROXY_STR,
     )
     service.run()
 

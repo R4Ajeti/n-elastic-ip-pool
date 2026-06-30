@@ -1,0 +1,9 @@
+Target URL:
+- https://api.proxyscrape.com/?request=getproxies&proxytype=all&timeout=300&country=all&ssl=yes&anonymity=elite
+HTTP method: GET
+Required headers:
+- Accept: text/plain
+- User-Agent: n-elastic-ip-pool/0.1
+Authentication: None. Do not add API keys, sponsor codes, session cookies, or credentials to this public example.
+
+This request documents ProxyScrapeProxy fetching a newline-delimited candidate proxy list. The proxy layer owns endpoint construction, query parameters, timeout handling, response reading, and provider errors. The service layer decides which candidates are valid, tested, ranked, saved, and returned.

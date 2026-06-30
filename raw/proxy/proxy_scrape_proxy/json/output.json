@@ -1,0 +1,5 @@
+{
+  "url": "https://api.proxyscrape.com/?request=getproxies&proxytype=all&timeout=300&country=all&ssl=yes&anonymity=elite",
+  "status_code": 200,
+  "proxy_candidate_text": "proxy-one.example.net:8080\nproxy-two.example.net:3128\n"
+}

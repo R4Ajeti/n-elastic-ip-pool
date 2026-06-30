@@ -1,7 +1,11 @@
-Target URL: https://example.com/health
+Target URL: https://api.ipify.org?format=json
 HTTP method: GET
 Required headers:
-- Accept: application/json
-Authentication: None for the placeholder example. Use only safe placeholder values when provider authentication is added later.
+- Accept: application/json, text/plain, */*
+- User-Agent: n-elastic-ip-pool/0.1
+Proxy configuration:
+- http: http://proxy-one.example.net:8080
+- https: http://proxy-one.example.net:8080
+Authentication: None. Proxies with embedded usernames, passwords, tokens, or session data are rejected by the formatter.
 
-This request documents the future health-check call made by ElasticIpHealthCheckProxy. It should check whether a proxy/IP resource can reach the configured health-check endpoint and return a normalized result to the service layer.
+This request documents ElasticIpHealthCheckProxy testing whether a candidate proxy can reach the configured health-check endpoint. The proxy layer performs the HTTP connectivity check and returns a normalized result. The service layer decides retry count, ranking, saving, and whether a proxy is usable.

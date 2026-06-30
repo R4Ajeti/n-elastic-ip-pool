@@ -7,4 +7,4 @@ Required headers:
 - User-Agent: n-elastic-ip-pool/0.1
 Authentication: None. KeyVal REST URL values are public, so never send secrets or real proxy credentials.
 
-This request documents the KeyValStoreProxy calls used by the service layer. The service hashes the configured KeyVal key and sends only safe dummy proxy data. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.
+This request documents the KeyValStoreProxy calls used by the service layer. The service hashes the configured KeyVal key and stores a JSON list of safe working-proxy metadata. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.
