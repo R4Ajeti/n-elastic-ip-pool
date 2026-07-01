@@ -7,11 +7,12 @@ from core.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolSer
 
 
 class FakeKeyValStoreProxy:
-    def __init__(self) -> None:
+    def __init__(self, storedBool: bool = True) -> None:
         self.valueStr = ""
         self.getKeyStr = ""
         self.setKeyStr = ""
         self.setValueStr = ""
+        self.storedBool = storedBool
 
     def getValue(self, keyStr: str) -> dict:
         self.getKeyStr = keyStr
@@ -28,10 +29,10 @@ class FakeKeyValStoreProxy:
         self.valueStr = valueStr
         return {
             "key": keyStr,
-            "stored": True,
+            "stored": self.storedBool,
             "value": valueStr,
             "response_value": valueStr,
-            "status_code": 200,
+            "status_code": 200 if self.storedBool else 500,
         }
 
     def buildGetUrl(self, keyStr: str) -> str:
@@ -173,6 +174,30 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             printedTextStr,
         )
         self.assertNotIn("[discovery] starting ProxyScrape search", printedTextStr)
+
+    def testRunReturnsWorkingProxyWhenCacheSaveFails(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy(storedBool=False)
+        service = VerboseElasticIpPoolService(
+            keyValStoreProxyStr="custom-key-source",
+            keyValStoreProxy=keyValStoreProxy,
+            elasticIpHealthCheckProxy=FakeWorkingElasticIpHealthCheckProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+        )
+
+        with patch("builtins.print") as printMock:
+            resultStr = service.run()
+
+        printedTextStr = "\n".join(
+            " ".join(str(arg) for arg in call.args)
+            for call in printMock.call_args_list
+        )
+        self.assertEqual(resultStr, "proxy-one.example.net:8080")
+        self.assertIn("[cache] save skipped:", printedTextStr)
+        self.assertIn("Proxy value was not stored in KeyVal.", printedTextStr)
+        self.assertIn(
+            "[run] selected proxy: proxy-one.example.net:8080",
+            printedTextStr,
+        )
 
     def testRunDebugPrintsDetailedCandidateAndProxyTestLines(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()

@@ -3,6 +3,7 @@ import unittest
 
 from core.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
+    KEY_VAL_MAX_VALUE_LENGTH_INT,
 )
 from core.helper.string_hash_helper import hashStringValue
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
@@ -427,7 +428,8 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertEqual(resultStr, "proxy-new.example.net:8080")
 
-    def testSearchRaisesWhenKeyValSaveFails(self) -> None:
+    def testSearchReturnsWorkingProxyWhenKeyValSaveFails(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy(storedBool=False)
         service = ElasticIpPoolService(
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
                 {
@@ -438,12 +440,45 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
                     ],
                 },
             ),
-            keyValStoreProxy=FakeKeyValStoreProxy(storedBool=False),
+            keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy("proxy-new.example.net:8080\n"),
         )
 
-        with self.assertRaises(RuntimeError):
-            service.search()
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "proxy-new.example.net:8080")
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 1)
+
+    def testBuildSavedProxyValueStrStopsBeforeKeyValValueLimit(self) -> None:
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+        )
+
+        valueStr = service.buildSavedProxyValueStr(
+            [
+                {"proxy": "213.21.254.26:1081"},
+                {"proxy": "72.56.238.99:9090"},
+                {"proxy": "72.56.238.99:1080"},
+                {"proxy": "34.43.46.91:443"},
+                {"proxy": "176.12.65.24:443"},
+                {"proxy": "91.107.182.124:82"},
+            ],
+        )
+        savedProxyList = json.loads(valueStr)
+
+        self.assertLessEqual(len(valueStr), KEY_VAL_MAX_VALUE_LENGTH_INT)
+        self.assertEqual(
+            savedProxyList,
+            [
+                "213.21.254.26:1081",
+                "72.56.238.99:9090",
+                "72.56.238.99:1080",
+                "34.43.46.91:443",
+                "176.12.65.24:443",
+            ],
+        )
 
     def testSearchHandlesTimeoutDuringProxyTesting(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()

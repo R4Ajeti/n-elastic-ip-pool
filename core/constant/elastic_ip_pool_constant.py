@@ -15,6 +15,7 @@ KEY_VAL_USER_AGENT_STR = "n-elastic-ip-pool/0.1"
 KEY_VAL_STORE_PROXY_ENV_NAME_STR = "keyValStoreProxyStr"
 KEY_VAL_DUMMY_PROXY_KEY_STR = "n-elastic-ip-pool-dummy-proxy-value"
 KEY_VAL_DUMMY_PROXY_VALUE_STR = "123.4.5.6:6666"
+KEY_VAL_MAX_VALUE_LENGTH_INT = 100
 PROXY_SCRAPE_API_BASE_URL_STR = "https://api.proxyscrape.com"
 PROXY_SCRAPE_REQUEST_VALUE_STR = "getproxies"
 PROXY_SCRAPE_PROXY_TYPE_STR = "all"

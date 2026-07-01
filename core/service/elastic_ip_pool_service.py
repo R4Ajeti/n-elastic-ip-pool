@@ -3,6 +3,7 @@ from json import JSONDecodeError
 
 from core.constant.elastic_ip_pool_constant import (
     KEY_VAL_MAX_SAVED_PROXY_COUNT_INT,
+    KEY_VAL_MAX_VALUE_LENGTH_INT,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
     PROXY_MAX_TIMING_MILLISECOND_INT,
@@ -42,7 +43,7 @@ class ElasticIpPoolService:
         self.proxyMaxTimingMillisecondInt = max(1, proxyMaxTimingMillisecondInt)
         self.rankedProxyDictList: list[dict] | None = None
         self.rankedProxyList: list[str] | None = None
-        
+
     def get(self) -> str | None:
         storedProxyValueStr = self.check()
         if storedProxyValueStr:
@@ -79,8 +80,11 @@ class ElasticIpPoolService:
         self.rankedProxyDictList = self.rankWorkingProxyList(workingProxyList)
         if not self.rankedProxyDictList:
             return None
-        
-        self.rankedProxyList = [str(proxyDict["proxy"]) for proxyDict in self.rankedProxyDictList]
+
+        self.rankedProxyList = [
+            str(proxyDict["proxy"])
+            for proxyDict in self.rankedProxyDictList
+        ]
 
         return str(self.rankedProxyDictList[0]["proxy"])
 
@@ -95,9 +99,16 @@ class ElasticIpPoolService:
         if not self.rankedProxyDictList:
             return None
 
-        self.rankedProxyList = [str(proxyDict["proxy"]) for proxyDict in self.rankedProxyDictList]
+        self.rankedProxyList = [
+            str(proxyDict["proxy"])
+            for proxyDict in self.rankedProxyDictList
+        ]
 
-        self.saveWorkingProxyList(self.rankedProxyDictList)
+        try:
+            self.saveWorkingProxyList(self.rankedProxyDictList)
+        except (KeyValStoreProxyError, RuntimeError) as error:
+            self.onWorkingProxySaveFailure(error)
+
         return str(self.rankedProxyDictList[0]["proxy"])
 
     def update(self, valueStr: str) -> str:
@@ -267,17 +278,46 @@ class ElasticIpPoolService:
 
     def saveWorkingProxyList(self, workingProxyList: list[dict]) -> str:
         # Store reusable proxy values only; full ranking metadata is too long for KeyVal path writes.
-        proxyValueList = [
-            str(workingProxyDict["proxy"])
-            for workingProxyDict in workingProxyList[:KEY_VAL_MAX_SAVED_PROXY_COUNT_INT]
-            if workingProxyDict.get("proxy")
-        ]
-        valueStr = json.dumps(
+        valueStr = self.buildSavedProxyValueStr(workingProxyList)
+        if not valueStr:
+            return ""
+
+        return self.update(valueStr)
+
+    def buildSavedProxyValueStr(self, workingProxyList: list[dict]) -> str:
+        proxyValueList = []
+        for workingProxyDict in workingProxyList:
+            if len(proxyValueList) >= KEY_VAL_MAX_SAVED_PROXY_COUNT_INT:
+                break
+
+            proxyStr = str(workingProxyDict.get("proxy") or "")
+            if not proxyStr:
+                continue
+
+            candidateProxyValueList = [*proxyValueList, proxyStr]
+            candidateValueStr = json.dumps(
+                candidateProxyValueList,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            )
+            if len(candidateValueStr) > KEY_VAL_MAX_VALUE_LENGTH_INT:
+                if proxyValueList:
+                    break
+                continue
+
+            proxyValueList = candidateProxyValueList
+
+        if not proxyValueList:
+            return ""
+
+        return json.dumps(
             proxyValueList,
             ensure_ascii=True,
             separators=(",", ":"),
         )
-        return self.update(valueStr)
+
+    def onWorkingProxySaveFailure(self, error: Exception) -> None:
+        return None
 
     def buildWorkingProxyRecord(
         self,

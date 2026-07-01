@@ -152,8 +152,15 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             )
 
         resultStr = super().saveWorkingProxyList(workingProxyList)
-        self.logInfo("[cache] stored proxy list:", resultStr)
+        if resultStr:
+            self.logInfo("[cache] stored proxy list:", resultStr)
+        else:
+            self.logInfo("[cache] stored proxy list: skipped")
+
         return resultStr
+
+    def onWorkingProxySaveFailure(self, error: Exception) -> None:
+        self.logInfo("[cache] save skipped:", str(error))
 
     def check(self) -> str | None:
         self.logInfo("[cache] checking saved proxy list")
