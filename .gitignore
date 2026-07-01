@@ -273,3 +273,6 @@ terraform.tfstate.*
 !skill/
 !skill/**/SKILL.md
 commands.txt
+key-val-load-test-log.txt
+.gitignore
+key-val-load-test-result.json
