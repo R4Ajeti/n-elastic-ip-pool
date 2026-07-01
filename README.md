@@ -8,6 +8,20 @@
 
 Its goal is to separate business logic, storage access, external API calls, helpers, and constants into clear layers.
 
+## ▶️ Usage
+
+Run the verbose Elastic IP pool service directly from Python:
+
+```python
+from core.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
+
+verboseElasticIpPoolService = VerboseElasticIpPoolService()
+verboseElasticIpPoolService.run()
+
+print("Final selected proxy:", verboseElasticIpPoolService.finalValueStr)
+print("Ranked proxy list:", verboseElasticIpPoolService.rankedProxyList)
+```
+
 ## 🏗️ Architecture
 
 ```text
