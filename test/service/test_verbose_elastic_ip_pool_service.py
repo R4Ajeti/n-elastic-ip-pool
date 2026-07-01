@@ -42,10 +42,14 @@ class FakeKeyValStoreProxy:
 
 
 class FakeProxyScrapeProxy:
+    def __init__(self) -> None:
+        self.fetchCountInt = 0
+
     def buildFetchUrl(self) -> str:
         return "https://proxy.example.test/?request=getproxies"
 
     def fetchProxyCandidateText(self) -> dict:
+        self.fetchCountInt += 1
         return {
             "url": "https://proxy.example.test",
             "status_code": 200,
@@ -140,6 +144,35 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             printedTextStr,
         )
         self.assertIn("[cache] stored proxy list:", printedTextStr)
+
+    def testRunUsesWorkingSavedProxyWithoutDiscoveryOrSave(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        keyValStoreProxy.valueStr = '["saved-fast.example.net:8080"]'
+        proxyScrapeProxy = FakeProxyScrapeProxy()
+        service = VerboseElasticIpPoolService(
+            keyValStoreProxyStr="custom-key-source",
+            keyValStoreProxy=keyValStoreProxy,
+            elasticIpHealthCheckProxy=FakeWorkingElasticIpHealthCheckProxy(),
+            proxyScrapeProxy=proxyScrapeProxy,
+        )
+
+        with patch("builtins.print") as printMock:
+            resultStr = service.run()
+
+        printedTextStr = "\n".join(
+            " ".join(str(arg) for arg in call.args)
+            for call in printMock.call_args_list
+        )
+        self.assertEqual(resultStr, "saved-fast.example.net:8080")
+        self.assertEqual(service.finalValueStr, "saved-fast.example.net:8080")
+        self.assertEqual(service.rankedProxyList, ["saved-fast.example.net:8080"])
+        self.assertEqual(proxyScrapeProxy.fetchCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
+        self.assertIn(
+            "[cache] usable saved proxy: saved-fast.example.net:8080",
+            printedTextStr,
+        )
+        self.assertNotIn("[discovery] starting ProxyScrape search", printedTextStr)
 
     def testRunDebugPrintsDetailedCandidateAndProxyTestLines(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()

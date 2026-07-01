@@ -27,6 +27,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
         loggerLevelStr: str | None = None,
     ) -> None:
+        self.finalValueStr: str | None = None
+        self.rankedProxyList: list[str] | None = None
         super().__init__(
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
@@ -50,13 +52,13 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logInfo("[run] log level:", self.loggerLevelStr)
         self.logInfo("[run] note: KeyVal is public; credentials are never stored")
 
-        finalValueStr = self.get()
+        self.finalValueStr = self.get()
 
-        self.logInfo("[run] selected proxy:", finalValueStr or "none")
+        self.logInfo("[run] selected proxy:", self.finalValueStr or "none")
         self.logDebug("[run] cache read URL:", self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr))
         self.logInfo("[run] took", self.getElapsedSecondStr(startFloat), "seconds")
 
-        return finalValueStr
+        return self.finalValueStr
 
     def get(self) -> str | None:
         self.logDebug("[workflow] resolving usable proxy")

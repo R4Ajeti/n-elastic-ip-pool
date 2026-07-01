@@ -40,7 +40,9 @@ class ElasticIpPoolService:
         self.dummyProxyValueStr = dummyProxyValueStr
         self.proxyValidationSuccessCountInt = max(1, proxyValidationSuccessCountInt)
         self.proxyMaxTimingMillisecondInt = max(1, proxyMaxTimingMillisecondInt)
-
+        self.rankedProxyDictList: list[dict] | None = None
+        self.rankedProxyList: list[str] | None = None
+        
     def get(self) -> str | None:
         storedProxyValueStr = self.check()
         if storedProxyValueStr:
@@ -74,11 +76,13 @@ class ElasticIpPoolService:
                     ),
                 )
 
-        rankedProxyList = self.rankWorkingProxyList(workingProxyList)
-        if not rankedProxyList:
+        self.rankedProxyDictList = self.rankWorkingProxyList(workingProxyList)
+        if not self.rankedProxyDictList:
             return None
+        
+        self.rankedProxyList = [str(proxyDict["proxy"]) for proxyDict in self.rankedProxyDictList]
 
-        return str(rankedProxyList[0]["proxy"])
+        return str(self.rankedProxyDictList[0]["proxy"])
 
     def search(self) -> str | None:
         proxyCandidateTextStr = self.fetchProxyCandidateText()
@@ -87,12 +91,14 @@ class ElasticIpPoolService:
             return None
 
         workingProxyList = self.validateProxyCandidateList(proxyCandidateList)
-        rankedProxyList = self.rankWorkingProxyList(workingProxyList)
-        if not rankedProxyList:
+        self.rankedProxyDictList = self.rankWorkingProxyList(workingProxyList)
+        if not self.rankedProxyDictList:
             return None
 
-        self.saveWorkingProxyList(rankedProxyList)
-        return str(rankedProxyList[0]["proxy"])
+        self.rankedProxyList = [str(proxyDict["proxy"]) for proxyDict in self.rankedProxyDictList]
+
+        self.saveWorkingProxyList(self.rankedProxyDictList)
+        return str(self.rankedProxyDictList[0]["proxy"])
 
     def update(self, valueStr: str) -> str:
         if valueStr is None:

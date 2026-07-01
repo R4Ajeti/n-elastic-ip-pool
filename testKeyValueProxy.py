@@ -12,9 +12,13 @@ def main() -> None:
         KEY_VAL_DUMMY_PROXY_KEY_STR,
     )
 
-    VerboseElasticIpPoolService(
+    verboseElasticIpPoolService = VerboseElasticIpPoolService(
         keyValStoreProxyStr=keyValStoreProxyStr,
-    ).run()
+    )
+    verboseElasticIpPoolService.run()
+    
+    print("Final selected proxy:", verboseElasticIpPoolService.finalValueStr)
+    print("Ranked proxy list:", verboseElasticIpPoolService.rankedProxyList)
 
 
 if __name__ == "__main__":
