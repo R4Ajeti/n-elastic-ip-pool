@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "n-elastic-ip-pool"
+version = "0.1.0"
+description = "Low-level Python service for managing an Elastic IP / IP pool with clean N-layer architecture."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+    { name = "n_elastic_ip_pool contributors" },
+]
+keywords = [
+    "elastic-ip",
+    "ip-pool",
+    "proxy-health-check",
+    "n-layer-architecture",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = []
+
+[project.optional-dependencies]
+test = [
+    "pytest==9.1.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/R4Ajeti/n-elastic-ip-pool"
+Repository = "https://github.com/R4Ajeti/n-elastic-ip-pool"
+Issues = "https://github.com/R4Ajeti/n-elastic-ip-pool/issues"
+
+[tool.setuptools.packages.find]
+include = ["core", "core.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]

@@ -10,6 +10,18 @@ Its goal is to separate business logic, storage access, external API calls, help
 
 ## ▶️ Usage
 
+Install directly from GitHub:
+
+```bash
+pip install "git+https://github.com/R4Ajeti/n-elastic-ip-pool.git"
+```
+
+For test dependencies:
+
+```bash
+pip install "n-elastic-ip-pool[test] @ git+https://github.com/R4Ajeti/n-elastic-ip-pool.git"
+```
+
 Run the verbose Elastic IP pool service directly from Python:
 
 ```python
