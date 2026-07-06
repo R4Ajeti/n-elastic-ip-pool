@@ -10,6 +10,34 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
         self.assertIsInstance(elastic_ip_pool_constant.DEFAULT_LOGGER_LEVEL_STR, str)
         self.assertIsInstance(elastic_ip_pool_constant.LOGGER_LEVEL_INFO_STR, str)
         self.assertIsInstance(elastic_ip_pool_constant.LOGGER_LEVEL_DEBUG_STR, str)
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_RELEASE_CHANNEL_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_SELECTION_MODE_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_RESULT_COUNT_INT,
+            int,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
+            int,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
+            bool,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
+            bool,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
+            bool,
+        )
         self.assertIsInstance(elastic_ip_pool_constant.DEFAULT_TIMEOUT_SECOND_INT, int)
         self.assertIsInstance(
             elastic_ip_pool_constant.MAX_ELASTIC_IP_FAILURE_COUNT_INT,

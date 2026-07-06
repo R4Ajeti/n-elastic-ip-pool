@@ -1,11 +1,20 @@
 import json
+import random
 from json import JSONDecodeError
 
 from core.constant.elastic_ip_pool_constant import (
+    DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
+    DEFAULT_PROXY_RELEASE_CHANNEL_STR,
+    DEFAULT_PROXY_RESULT_COUNT_INT,
+    DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
+    DEFAULT_PROXY_SELECTION_MODE_STR,
+    DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
+    DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
     KEY_VAL_MAX_SAVED_PROXY_COUNT_INT,
     KEY_VAL_MAX_VALUE_LENGTH_INT,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
+    PROXY_SELECTION_MODE_RANDOM_STR,
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
@@ -30,6 +39,14 @@ class ElasticIpPoolService:
         dummyProxyValueStr: str = KEY_VAL_DUMMY_PROXY_VALUE_STR,
         proxyValidationSuccessCountInt: int = PROXY_VALIDATION_SUCCESS_COUNT_INT,
         proxyMaxTimingMillisecondInt: int = PROXY_MAX_TIMING_MILLISECOND_INT,
+        proxySelectionModeStr: str = DEFAULT_PROXY_SELECTION_MODE_STR,
+        proxyResultCountInt: int = DEFAULT_PROXY_RESULT_COUNT_INT,
+        proxyCandidateLimitInt: int = DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
+        proxyShuffleCandidateBool: bool = DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
+        proxyRandomSeedInt: int | None = None,
+        useSavedProxyBool: bool = DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
+        saveWorkingProxyBool: bool = DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
+        releaseChannelStr: str = DEFAULT_PROXY_RELEASE_CHANNEL_STR,
     ) -> None:
         self.elasticIpPoolRepo = elasticIpPoolRepo or ElasticIpPoolRepo()
         self.elasticIpHealthCheckProxy = (
@@ -39,15 +56,35 @@ class ElasticIpPoolService:
         self.proxyScrapeProxy = proxyScrapeProxy or ProxyScrapeProxy()
         self.keyValStoreProxyStr = keyValStoreProxyStr
         self.dummyProxyValueStr = dummyProxyValueStr
-        self.proxyValidationSuccessCountInt = max(1, proxyValidationSuccessCountInt)
-        self.proxyMaxTimingMillisecondInt = max(1, proxyMaxTimingMillisecondInt)
+        self.proxyValidationSuccessCountInt = max(
+            1,
+            int(proxyValidationSuccessCountInt or 1),
+        )
+        self.proxyMaxTimingMillisecondInt = max(
+            1,
+            int(proxyMaxTimingMillisecondInt or 1),
+        )
+        self.proxySelectionModeStr = self.normalizeProxySelectionMode(
+            proxySelectionModeStr,
+        )
+        self.proxyResultCountInt = max(0, int(proxyResultCountInt or 0))
+        self.proxyCandidateLimitInt = max(0, int(proxyCandidateLimitInt or 0))
+        self.proxyShuffleCandidateBool = bool(proxyShuffleCandidateBool)
+        self.proxyRandomSeedInt = proxyRandomSeedInt
+        self.proxyRandom = random.Random(proxyRandomSeedInt)
+        self.useSavedProxyBool = bool(useSavedProxyBool)
+        self.saveWorkingProxyBool = bool(saveWorkingProxyBool)
+        self.releaseChannelStr = str(
+            releaseChannelStr or DEFAULT_PROXY_RELEASE_CHANNEL_STR,
+        ).lower()
         self.rankedProxyDictList: list[dict] | None = None
         self.rankedProxyList: list[str] | None = None
 
     def get(self) -> str | None:
-        storedProxyValueStr = self.check()
-        if storedProxyValueStr:
-            return storedProxyValueStr
+        if self.useSavedProxyBool:
+            storedProxyValueStr = self.check()
+            if storedProxyValueStr:
+                return storedProxyValueStr
 
         return self.search()
 
@@ -77,7 +114,9 @@ class ElasticIpPoolService:
                     ),
                 )
 
-        self.rankedProxyDictList = self.rankWorkingProxyList(workingProxyList)
+        self.rankedProxyDictList = self.limitWorkingProxyList(
+            self.rankWorkingProxyList(workingProxyList),
+        )
         if not self.rankedProxyDictList:
             return None
 
@@ -95,7 +134,9 @@ class ElasticIpPoolService:
             return None
 
         workingProxyList = self.validateProxyCandidateList(proxyCandidateList)
-        self.rankedProxyDictList = self.rankWorkingProxyList(workingProxyList)
+        self.rankedProxyDictList = self.limitWorkingProxyList(
+            self.rankWorkingProxyList(workingProxyList),
+        )
         if not self.rankedProxyDictList:
             return None
 
@@ -104,10 +145,13 @@ class ElasticIpPoolService:
             for proxyDict in self.rankedProxyDictList
         ]
 
-        try:
-            self.saveWorkingProxyList(self.rankedProxyDictList)
-        except (KeyValStoreProxyError, RuntimeError) as error:
-            self.onWorkingProxySaveFailure(error)
+        if self.saveWorkingProxyBool:
+            try:
+                self.saveWorkingProxyList(self.rankedProxyDictList)
+            except (KeyValStoreProxyError, RuntimeError) as error:
+                self.onWorkingProxySaveFailure(error)
+        else:
+            self.onWorkingProxySaveSkipped()
 
         return str(self.rankedProxyDictList[0]["proxy"])
 
@@ -150,7 +194,18 @@ class ElasticIpPoolService:
             seenProxySet.add(normalizedProxyStr)
             proxyCandidateList.append(normalizedProxyStr)
 
-        return proxyCandidateList
+        return self.prepareProxyCandidateList(proxyCandidateList)
+
+    def prepareProxyCandidateList(self, proxyCandidateList: list[str]) -> list[str]:
+        preparedProxyCandidateList = list(proxyCandidateList)
+
+        if self.proxyShuffleCandidateBool:
+            self.proxyRandom.shuffle(preparedProxyCandidateList)
+
+        if self.proxyCandidateLimitInt:
+            return preparedProxyCandidateList[: self.proxyCandidateLimitInt]
+
+        return preparedProxyCandidateList
 
     def parseSavedProxyList(self, savedValueStr: str) -> list[dict]:
         try:
@@ -268,13 +323,24 @@ class ElasticIpPoolService:
         return self.getTimingMsInt(testResultDict) <= self.proxyMaxTimingMillisecondInt
 
     def rankWorkingProxyList(self, workingProxyList: list[dict]) -> list[dict]:
-        return sorted(
+        rankedWorkingProxyList = sorted(
             workingProxyList,
             key=lambda workingProxyDict: (
                 int(workingProxyDict.get("averageTimingMs") or 0),
                 str(workingProxyDict.get("proxy") or ""),
             ),
         )
+
+        if self.proxySelectionModeStr == PROXY_SELECTION_MODE_RANDOM_STR:
+            self.proxyRandom.shuffle(rankedWorkingProxyList)
+
+        return rankedWorkingProxyList
+
+    def limitWorkingProxyList(self, workingProxyList: list[dict]) -> list[dict]:
+        if not self.proxyResultCountInt:
+            return workingProxyList
+
+        return workingProxyList[: self.proxyResultCountInt]
 
     def saveWorkingProxyList(self, workingProxyList: list[dict]) -> str:
         # Store reusable proxy values only; full ranking metadata is too long for KeyVal path writes.
@@ -287,7 +353,7 @@ class ElasticIpPoolService:
     def buildSavedProxyValueStr(self, workingProxyList: list[dict]) -> str:
         proxyValueList = []
         for workingProxyDict in workingProxyList:
-            if len(proxyValueList) >= KEY_VAL_MAX_SAVED_PROXY_COUNT_INT:
+            if len(proxyValueList) >= self.getMaxSavedProxyCountInt():
                 break
 
             proxyStr = str(workingProxyDict.get("proxy") or "")
@@ -319,6 +385,9 @@ class ElasticIpPoolService:
     def onWorkingProxySaveFailure(self, error: Exception) -> None:
         return None
 
+    def onWorkingProxySaveSkipped(self) -> None:
+        return None
+
     def buildWorkingProxyRecord(
         self,
         proxyStr: str,
@@ -346,6 +415,21 @@ class ElasticIpPoolService:
 
     def getKeyValDummyProxyKey(self) -> str:
         return self.getKeyValProxyKey()
+
+    def getMaxSavedProxyCountInt(self) -> int:
+        if self.proxyResultCountInt:
+            return min(self.proxyResultCountInt, KEY_VAL_MAX_SAVED_PROXY_COUNT_INT)
+
+        return KEY_VAL_MAX_SAVED_PROXY_COUNT_INT
+
+    def normalizeProxySelectionMode(self, proxySelectionModeStr: str) -> str:
+        normalizedProxySelectionModeStr = str(
+            proxySelectionModeStr or DEFAULT_PROXY_SELECTION_MODE_STR,
+        ).lower()
+        if normalizedProxySelectionModeStr == PROXY_SELECTION_MODE_RANDOM_STR:
+            return PROXY_SELECTION_MODE_RANDOM_STR
+
+        return DEFAULT_PROXY_SELECTION_MODE_STR
 
     def getAvailableResource(self) -> dict | None:
         """Select a usable proxy/IP resource once business rules are implemented."""

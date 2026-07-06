@@ -4,6 +4,7 @@ import unittest
 from core.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_MAX_VALUE_LENGTH_INT,
+    PROXY_SELECTION_MODE_RANDOM_STR,
 )
 from core.helper.string_hash_helper import hashStringValue
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
@@ -477,6 +478,157 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
                 "72.56.238.99:1080",
                 "34.43.46.91:443",
                 "176.12.65.24:443",
+            ],
+        )
+
+    def testSearchLimitsRankedAndSavedProxyCount(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-one.example.net:8080": [
+                        buildTestResult("proxy-one.example.net:8080", True, 300),
+                    ],
+                    "proxy-two.example.net:8080": [
+                        buildTestResult("proxy-two.example.net:8080", True, 100),
+                    ],
+                    "proxy-three.example.net:8080": [
+                        buildTestResult("proxy-three.example.net:8080", True, 200),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy(
+                "proxy-one.example.net:8080\n"
+                "proxy-two.example.net:8080\n"
+                "proxy-three.example.net:8080\n",
+            ),
+            proxyValidationSuccessCountInt=1,
+            proxyResultCountInt=2,
+        )
+
+        resultStr = service.search()
+        savedProxyList = json.loads(keyValStoreProxy.setValueStr)
+
+        self.assertEqual(resultStr, "proxy-two.example.net:8080")
+        self.assertEqual(
+            service.rankedProxyList,
+            ["proxy-two.example.net:8080", "proxy-three.example.net:8080"],
+        )
+        self.assertEqual(
+            savedProxyList,
+            ["proxy-two.example.net:8080", "proxy-three.example.net:8080"],
+        )
+
+    def testGetCanSkipSavedProxyCache(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy(
+            {
+                "key": "stored-key",
+                "exists": True,
+                "value": '["saved-fast.example.net:8080"]',
+            },
+        )
+        proxyScrapeProxy = FakeProxyScrapeProxy("proxy-new.example.net:8080\n")
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-new.example.net:8080": [
+                        buildTestResult("proxy-new.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=proxyScrapeProxy,
+            proxyValidationSuccessCountInt=1,
+            useSavedProxyBool=False,
+        )
+
+        resultStr = service.get()
+
+        self.assertEqual(resultStr, "proxy-new.example.net:8080")
+        self.assertEqual(keyValStoreProxy.getKeyStr, "")
+        self.assertEqual(proxyScrapeProxy.fetchCallCountInt, 1)
+
+    def testSearchCanSkipSavingWorkingProxyList(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-new.example.net:8080": [
+                        buildTestResult("proxy-new.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy("proxy-new.example.net:8080\n"),
+            proxyValidationSuccessCountInt=1,
+            saveWorkingProxyBool=False,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "proxy-new.example.net:8080")
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
+
+    def testCandidateShuffleAndLimitAreDeterministicWithSeed(self) -> None:
+        healthCheckProxy = FakeElasticIpHealthCheckProxy(
+            {
+                "proxy-one.example.net:8080": [
+                    buildTestResult("proxy-one.example.net:8080", True, 100),
+                ],
+                "proxy-two.example.net:8080": [
+                    buildTestResult("proxy-two.example.net:8080", True, 100),
+                ],
+                "proxy-three.example.net:8080": [
+                    buildTestResult("proxy-three.example.net:8080", True, 100),
+                ],
+            },
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=healthCheckProxy,
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(
+                "proxy-one.example.net:8080\n"
+                "proxy-two.example.net:8080\n"
+                "proxy-three.example.net:8080\n",
+            ),
+            proxyValidationSuccessCountInt=1,
+            proxyShuffleCandidateBool=True,
+            proxyRandomSeedInt=7,
+            proxyCandidateLimitInt=2,
+        )
+
+        service.search()
+
+        self.assertEqual(
+            healthCheckProxy.testCallList,
+            ["proxy-three.example.net:8080", "proxy-one.example.net:8080"],
+        )
+
+    def testRandomSelectionModeUsesSeededWorkingProxyOrder(self) -> None:
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+            proxySelectionModeStr=PROXY_SELECTION_MODE_RANDOM_STR,
+            proxyRandomSeedInt=42,
+        )
+
+        resultList = service.rankWorkingProxyList(
+            [
+                {"proxy": "proxy-one.example.net:8080", "averageTimingMs": 100},
+                {"proxy": "proxy-two.example.net:8080", "averageTimingMs": 200},
+                {"proxy": "proxy-three.example.net:8080", "averageTimingMs": 300},
+            ],
+        )
+
+        self.assertEqual(
+            [proxyDict["proxy"] for proxyDict in resultList],
+            [
+                "proxy-two.example.net:8080",
+                "proxy-one.example.net:8080",
+                "proxy-three.example.net:8080",
             ],
         )
 

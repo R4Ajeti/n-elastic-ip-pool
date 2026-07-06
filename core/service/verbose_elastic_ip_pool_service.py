@@ -2,11 +2,20 @@ import time
 
 from core.constant.elastic_ip_pool_constant import (
     DEFAULT_LOGGER_LEVEL_STR,
+    DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
+    DEFAULT_PROXY_RELEASE_CHANNEL_STR,
+    DEFAULT_PROXY_RESULT_COUNT_INT,
+    DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
+    DEFAULT_PROXY_SELECTION_MODE_STR,
+    DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
+    DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
     LOGGER_LEVEL_DEBUG_STR,
     LOGGER_LEVEL_ENV_NAME_STR,
     LOGGER_LEVEL_INFO_STR,
+    PROXY_MAX_TIMING_MILLISECOND_INT,
+    PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
 from core.helper.env_value_helper import getEnvValue
 from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
@@ -26,6 +35,16 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
         loggerLevelStr: str | None = None,
+        proxyValidationSuccessCountInt: int = PROXY_VALIDATION_SUCCESS_COUNT_INT,
+        proxyMaxTimingMillisecondInt: int = PROXY_MAX_TIMING_MILLISECOND_INT,
+        proxySelectionModeStr: str = DEFAULT_PROXY_SELECTION_MODE_STR,
+        proxyResultCountInt: int = DEFAULT_PROXY_RESULT_COUNT_INT,
+        proxyCandidateLimitInt: int = DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
+        proxyShuffleCandidateBool: bool = DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
+        proxyRandomSeedInt: int | None = None,
+        useSavedProxyBool: bool = DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
+        saveWorkingProxyBool: bool = DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
+        releaseChannelStr: str = DEFAULT_PROXY_RELEASE_CHANNEL_STR,
     ) -> None:
         self.finalValueStr: str | None = None
         self.rankedProxyList: list[str] | None = None
@@ -35,6 +54,16 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             proxyScrapeProxy=proxyScrapeProxy,
             keyValStoreProxyStr=keyValStoreProxyStr,
             dummyProxyValueStr=dummyProxyValueStr,
+            proxyValidationSuccessCountInt=proxyValidationSuccessCountInt,
+            proxyMaxTimingMillisecondInt=proxyMaxTimingMillisecondInt,
+            proxySelectionModeStr=proxySelectionModeStr,
+            proxyResultCountInt=proxyResultCountInt,
+            proxyCandidateLimitInt=proxyCandidateLimitInt,
+            proxyShuffleCandidateBool=proxyShuffleCandidateBool,
+            proxyRandomSeedInt=proxyRandomSeedInt,
+            useSavedProxyBool=useSavedProxyBool,
+            saveWorkingProxyBool=saveWorkingProxyBool,
+            releaseChannelStr=releaseChannelStr,
         )
         resolvedLoggerLevelStr = loggerLevelStr or getEnvValue(
             LOGGER_LEVEL_ENV_NAME_STR,
@@ -50,6 +79,18 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logDebug("[run] key source:", self.keyValStoreProxyStr)
         self.logInfo("[run] hashed storage key:", keyValKeyHashStr)
         self.logInfo("[run] log level:", self.loggerLevelStr)
+        self.logInfo(
+            "[run] options:",
+            f"releaseChannel={self.releaseChannelStr}",
+            f"count={self.getReadableCountStr(self.proxyResultCountInt)}",
+            f"selectionMode={self.proxySelectionModeStr}",
+            f"candidateLimit={self.getReadableCountStr(self.proxyCandidateLimitInt)}",
+            f"shuffleCandidates={self.proxyShuffleCandidateBool}",
+            f"validationCount={self.proxyValidationSuccessCountInt}",
+            f"maxTimingMs={self.proxyMaxTimingMillisecondInt}",
+            f"useCache={self.useSavedProxyBool}",
+            f"save={self.saveWorkingProxyBool}",
+        )
         self.logInfo("[run] note: KeyVal is public; credentials are never stored")
 
         self.finalValueStr = self.get()
@@ -162,6 +203,9 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def onWorkingProxySaveFailure(self, error: Exception) -> None:
         self.logInfo("[cache] save skipped:", str(error))
 
+    def onWorkingProxySaveSkipped(self) -> None:
+        self.logInfo("[cache] save skipped: disabled")
+
     def check(self) -> str | None:
         self.logInfo("[cache] checking saved proxy list")
         resultStr = super().check()
@@ -184,6 +228,12 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
 
     def getElapsedSecondStr(self, startFloat: float) -> str:
         return f"{max(0.0, time.perf_counter() - startFloat):.3f}"
+
+    def getReadableCountStr(self, countInt: int) -> str:
+        if countInt:
+            return str(countInt)
+
+        return "all"
 
     def logInfo(self, *valueTuple) -> None:
         if self.loggerLevelStr in {LOGGER_LEVEL_INFO_STR, LOGGER_LEVEL_DEBUG_STR}:

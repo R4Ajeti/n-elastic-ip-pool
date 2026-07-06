@@ -26,6 +26,14 @@ From this repository, the same flow is available through the example runner:
 LOGGER=INFO python3 testKeyValueProxy.py
 ```
 
+The runner also accepts optional parameters for more customizable discovery:
+
+```bash
+python3 testKeyValueProxy.py --release-channel beta --count 3 --selection-mode random --shuffle-candidates --random-seed 42
+python3 testKeyValueProxy.py --release-channel stable --country US --proxy-type http --count 1
+python3 testKeyValueProxy.py --release-channel canary --candidate-limit 500 --no-cache --no-save
+```
+
 Use `LOGGER=DEBUG` when you want to inspect ProxyScrape URLs, candidate rows,
 validation attempts, KeyVal read and write URLs, and the final ranking.
 
@@ -200,6 +208,48 @@ export keyValStoreProxyStr="n-elastic-ip-pool-dummy-proxy-value"
 
 `keyValStoreProxyStr` is a namespace/source string that is hashed before use as
 the KeyVal storage key. Do not put secrets in public KeyVal values.
+
+## Runner Options
+
+`testKeyValueProxy.py` can be run with optional parameters when you want to make
+candidate discovery and randomness more customizable:
+
+| Option | Values | Default |
+| --- | --- | --- |
+| `--release-channel` | `stable`, `beta`, `canary` | `stable` |
+| `--count` | integer, `0` means all that fit in KeyVal | channel default |
+| `--selection-mode` | `fastest`, `random` | channel default |
+| `--candidate-limit` | integer, `0` means all candidates | channel default |
+| `--shuffle-candidates` / `--no-shuffle-candidates` | boolean flag | channel default |
+| `--random-seed` | integer | unset |
+| `--validation-count` | integer | channel default |
+| `--max-timing-ms` | integer milliseconds | channel default |
+| `--cache` / `--no-cache` | boolean flag | enabled |
+| `--save` / `--no-save` | boolean flag | enabled |
+| `--country` | `all`, `US`, or another ProxyScrape country filter | `all` |
+| `--proxy-type` | `all`, `http`, `socks4`, `socks5` | `all` |
+| `--ssl` | `yes`, `no`, or provider-supported value | `yes` |
+| `--anonymity` | `elite`, `anonymous`, `transparent`, or provider-supported value | `elite` |
+| `--target-url` | health-check URL | `https://api.ipify.org?format=json` |
+| `--provider-base-url` | ProxyScrape-compatible base URL | `https://api.proxyscrape.com` |
+| `--provider-timeout-ms` | ProxyScrape query timeout in milliseconds | `300` |
+| `--provider-timeout-second` | network timeout for ProxyScrape and KeyVal | `10` |
+| `--keyval-base-url` | KeyVal-compatible base URL | `https://api.keyval.org` |
+| `--key-source` | string hashed into the KeyVal storage key | env/default key source |
+| `--log-level` | `INFO`, `DEBUG` | `LOGGER` env or `INFO` |
+
+Release channels are presets:
+
+- `stable`: strict, predictable defaults. Uses fastest selection, no candidate
+  shuffle, three validation passes, and a 2000 ms max health-check timing.
+- `beta`: more exploratory. Keeps up to 3 proxies, shuffles candidates, uses
+  random selection, validates 3 passes, and allows up to 2500 ms.
+- `canary`: most exploratory. Keeps up to 5 proxies, shuffles candidates, uses
+  random selection, validates 2 passes, limits candidates to 500, and allows up
+  to 3500 ms.
+
+CLI values override the release-channel preset. For repeatable random runs, pass
+`--random-seed` with `--selection-mode random` or `--shuffle-candidates`.
 
 ## KeyVal Persistence
 
