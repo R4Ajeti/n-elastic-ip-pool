@@ -46,7 +46,7 @@ class KeyValStoreProxy:
                 f"KeyVal get request failed with status {error.code}.",
             ) from error
 
-        valueStr = self._extractValueFromResponse(responseTextStr)
+        valueStr, _ = self._extractValueAndStatusFromResponse(responseTextStr)
 
         return {
             "key": keyStr,
@@ -66,8 +66,9 @@ class KeyValStoreProxy:
                 f"KeyVal set request failed with status {error.code}.",
             ) from error
 
-        responseValueStr = self._extractValueFromResponse(responseTextStr)
-        responseStatusStr = self._extractStatusFromResponse(responseTextStr)
+        responseValueStr, responseStatusStr = self._extractValueAndStatusFromResponse(
+            responseTextStr,
+        )
         storedBool = 200 <= statusCodeInt < 300
         if responseStatusStr:
             storedBool = storedBool and responseStatusStr == "SUCCESS"
@@ -112,29 +113,30 @@ class KeyValStoreProxy:
         return responseTextStr, statusCodeInt
 
     def _extractValueFromResponse(self, responseTextStr: str) -> str | None:
-        if not responseTextStr:
-            return None
-
-        responseDict = self._extractDictFromResponse(responseTextStr)
-        if not isinstance(responseDict, dict):
-            return responseTextStr
-
-        valueStr = responseDict.get("val")
-        if valueStr is None:
-            return responseTextStr
-
-        return str(valueStr)
+        valueStr, _ = self._extractValueAndStatusFromResponse(responseTextStr)
+        return valueStr
 
     def _extractStatusFromResponse(self, responseTextStr: str) -> str | None:
+        _, statusStr = self._extractValueAndStatusFromResponse(responseTextStr)
+        return statusStr
+
+    def _extractValueAndStatusFromResponse(
+        self,
+        responseTextStr: str,
+    ) -> tuple[str | None, str | None]:
+        if not responseTextStr:
+            return None, None
+
         responseDict = self._extractDictFromResponse(responseTextStr)
         if not isinstance(responseDict, dict):
-            return None
+            return responseTextStr, None
 
+        valueStr = responseDict.get("val")
         statusStr = responseDict.get("status")
-        if statusStr is None:
-            return None
-
-        return str(statusStr)
+        return (
+            responseTextStr if valueStr is None else str(valueStr),
+            None if statusStr is None else str(statusStr),
+        )
 
     def _extractDictFromResponse(self, responseTextStr: str) -> dict | None:
         try:

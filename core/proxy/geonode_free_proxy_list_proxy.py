@@ -117,11 +117,15 @@ class GeonodeFreeProxyListProxy:
                 "Geonode response data must be a list.",
             )
 
+        allowedProtocolSet = self.getAllowedProtocolSet()
         proxyCandidateList = []
         proxyCandidateMetadataList = []
         seenProxySet = set()
         for proxyRecord in proxyRecordList:
-            normalizedProxyRecordDict = self.normalizeProxyRecord(proxyRecord)
+            normalizedProxyRecordDict = self.normalizeProxyRecord(
+                proxyRecord,
+                allowedProtocolSet,
+            )
             if not normalizedProxyRecordDict:
                 continue
 
@@ -133,16 +137,21 @@ class GeonodeFreeProxyListProxy:
             proxyCandidateList.append(proxyStr)
             proxyCandidateMetadataList.append(normalizedProxyRecordDict)
 
-        proxyCandidateTextStr = "".join(
-            f"{proxyStr}\n"
-            for proxyStr in proxyCandidateList
+        proxyCandidateTextStr = (
+            "\n".join(proxyCandidateList) + "\n"
+            if proxyCandidateList
+            else ""
         )
         return {
             "proxy_candidate_text": proxyCandidateTextStr,
             "proxy_candidate_metadata_list": proxyCandidateMetadataList,
         }
 
-    def normalizeProxyRecord(self, proxyRecord) -> dict | None:
+    def normalizeProxyRecord(
+        self,
+        proxyRecord,
+        allowedProtocolSet: set[str] | None = None,
+    ) -> dict | None:
         if not isinstance(proxyRecord, dict):
             return None
 
@@ -155,7 +164,9 @@ class GeonodeFreeProxyListProxy:
         if not proxyStr:
             return None
 
-        allowedProtocolSet = self.getAllowedProtocolSet()
+        if allowedProtocolSet is None:
+            allowedProtocolSet = self.getAllowedProtocolSet()
+
         protocolList = self.normalizeProtocolList(proxyRecord.get("protocols"))
         supportedProtocolList = [
             protocolStr

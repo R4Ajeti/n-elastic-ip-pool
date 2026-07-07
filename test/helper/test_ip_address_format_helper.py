@@ -5,13 +5,17 @@ from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 
 
 class IpAddressFormatHelperTest(unittest.TestCase):
-    @unittest.skip("Placeholder until generic IP address format validation is implemented.")
     def testIsIpAddressFormatValidAcceptsDocumentationIp(self) -> None:
         self.assertTrue(isIpAddressFormatValid("203.0.113.10"))
 
-    @unittest.skip("Placeholder until generic IP address format validation is implemented.")
+    def testIsIpAddressFormatValidAcceptsIpv6Address(self) -> None:
+        self.assertTrue(isIpAddressFormatValid("2001:db8::1"))
+
     def testIsIpAddressFormatValidRejectsInvalidText(self) -> None:
         self.assertFalse(isIpAddressFormatValid("not-an-ip-address"))
+
+    def testIsIpAddressFormatValidRejectsWhitespacePaddedValue(self) -> None:
+        self.assertFalse(isIpAddressFormatValid(" 203.0.113.10 "))
 
 
 class StringHashHelperTest(unittest.TestCase):

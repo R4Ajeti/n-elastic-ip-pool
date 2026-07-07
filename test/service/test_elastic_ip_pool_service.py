@@ -144,13 +144,17 @@ class FakeProxyUsageHistoryRepo:
     ) -> None:
         self.usageCountByProxyDict = dict(usageCountByProxyDict or {})
         self.disabledProxySet = set(disabledProxySet or set())
+        self.getProxyUsageCountCallList: list[str] = []
+        self.isProxyDisabledCallList: list[str] = []
         self.recordProxyUsageCallList: list[tuple[str, dict | None]] = []
         self.markProxyDisabledCallList: list[str] = []
 
     def getProxyUsageCount(self, proxyStr: str) -> int:
+        self.getProxyUsageCountCallList.append(proxyStr)
         return int(self.usageCountByProxyDict.get(proxyStr, 0))
 
     def isProxyDisabled(self, proxyStr: str) -> bool:
+        self.isProxyDisabledCallList.append(proxyStr)
         return proxyStr in self.disabledProxySet
 
     def recordProxyUsage(
@@ -1041,6 +1045,33 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         self.assertEqual(
             usageHistoryRepo.recordProxyUsageCallList[0][1]["source"],
             PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
+        )
+
+    def testSearchChecksUsageHistoryOnceBeforeValidation(self) -> None:
+        usageHistoryRepo = FakeProxyUsageHistoryRepo()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-one.example.net:8080": [
+                        buildTestResult("proxy-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy("proxy-one.example.net:8080\n"),
+            proxyUsageHistoryRepo=usageHistoryRepo,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        service.search()
+
+        self.assertEqual(
+            usageHistoryRepo.isProxyDisabledCallList,
+            ["proxy-one.example.net:8080"],
+        )
+        self.assertEqual(
+            usageHistoryRepo.getProxyUsageCountCallList,
+            ["proxy-one.example.net:8080"],
         )
 
     def testSearchSkipsAndDisablesProxyAtHistoricUsageLimit(self) -> None:

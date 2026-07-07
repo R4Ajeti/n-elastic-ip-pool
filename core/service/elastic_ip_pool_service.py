@@ -182,7 +182,10 @@ class ElasticIpPoolService:
         if not proxyCandidateList:
             return None
 
-        workingProxyList = self.validateProxyCandidateList(proxyCandidateList)
+        workingProxyList = self.validateProxyCandidateList(
+            proxyCandidateList,
+            proxyUsagePrecheckedBool=True,
+        )
         self.rankedProxyDictList = self.limitWorkingProxyList(
             self.rankWorkingProxyList(workingProxyList),
         )
@@ -331,7 +334,11 @@ class ElasticIpPoolService:
 
         return proxyList
 
-    def validateProxyCandidateList(self, proxyCandidateList: list[str]) -> list[dict]:
+    def validateProxyCandidateList(
+        self,
+        proxyCandidateList: list[str],
+        proxyUsagePrecheckedBool: bool = False,
+    ) -> list[dict]:
         proxyCheckByProxyDict = {
             proxyStr: {
                 "proxy": proxyStr,
@@ -339,7 +346,7 @@ class ElasticIpPoolService:
                 "lastCheckedAt": "",
             }
             for proxyStr in proxyCandidateList
-            if self.isProxyUsageAllowed(proxyStr)
+            if proxyUsagePrecheckedBool or self.isProxyUsageAllowed(proxyStr)
         }
 
         for passNumberInt in range(1, self.proxyValidationSuccessCountInt + 1):
