@@ -1,0 +1,25 @@
+Target URL:
+- https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&anonymityLevel=elite&filterUpTime=80
+
+HTTP method: GET
+
+Required headers:
+- Accept: application/json
+- User-Agent: n-elastic-ip-pool/0.1
+
+Query parameters:
+- limit=500
+- page=1
+- sort_by=lastChecked
+- sort_type=desc
+- protocols=http,https
+- anonymityLevel=elite
+- filterUpTime=80
+
+This request documents GeonodeFreeProxyListProxy fetching public free proxy candidates from the Geonode Free Proxy List endpoint. The proxy layer owns endpoint construction, query parameters, timeout handling, response reading, JSON parsing, provider errors, and normalization to internal proxy candidate rows.
+
+Public free proxies are only appropriate for testing or non-sensitive traffic. Do not send credentials, customer data, private infrastructure traffic, or sensitive provider data through public free proxies.
+
+Authentication: None. The free endpoint does not require credentials. Do not add API keys, session cookies, usernames, passwords, or tokens to this public example.
+
+Endpoint verification note: On 2026-07-07, the live endpoint accepted limit=500 for the free proxy list. This example intentionally uses safe documentation hostnames instead of copied live proxy records.

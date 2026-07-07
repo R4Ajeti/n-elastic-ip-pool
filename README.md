@@ -88,7 +88,8 @@ restriction bypass behavior.
 - `check()` reads saved proxy values from KeyVal and revalidates them before
   use.
 - `search()` fetches proxy candidates, validates candidates, and ranks working
-  proxies.
+  proxies. ProxyScrape is tried first, with Geonode Free Proxy List used only
+  as a fallback.
 - `update(valueStr)` stores an explicit proxy value/list in KeyVal.
 - Candidate proxy rows are normalized and deduplicated before validation.
 - Working proxies must pass multiple validation checks before they are returned
@@ -167,6 +168,7 @@ get()
   +-- search() when cache is empty or unusable
         |
         +-- fetch ProxyScrape candidate text
+        +-- fetch Geonode Free Proxy List candidate text only if needed
         +-- normalize and deduplicate rows
         +-- test each proxy against the target URL
         +-- require repeated successful validation
@@ -184,6 +186,8 @@ The current provider abstractions are:
 
 - `core/proxy/proxy_scrape_proxy.py` fetches candidate proxy rows from
   ProxyScrape.
+- `core/proxy/geonode_free_proxy_list_proxy.py` fetches fallback candidate
+  proxy rows from Geonode Free Proxy List.
 - `core/proxy/elastic_ip_health_check_proxy.py` tests whether a candidate proxy
   can reach the configured target URL.
 - `core/proxy/key_val_store_proxy.py` reads and writes saved proxy state through

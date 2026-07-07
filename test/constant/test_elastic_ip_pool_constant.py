@@ -60,6 +60,50 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
             int,
         )
         self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_API_BASE_URL_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_LIMIT_INT,
+            int,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_PAGE_INT,
+            int,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_SORT_BY_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_SORT_TYPE_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_PROTOCOLS_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_ANONYMITY_LEVEL_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.GEONODE_FREE_PROXY_LIST_MIN_UPTIME_INT,
+            int,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.PROXY_SOURCE_SAVED_PROXY_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.PROXY_SOURCE_GEONODE_FREE_DISCOVERED_PROXY_STR,
+            str,
+        )
+        self.assertIsInstance(
             elastic_ip_pool_constant.PROXY_TEST_TARGET_URL_STR,
             str,
         )

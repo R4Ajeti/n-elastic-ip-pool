@@ -106,6 +106,7 @@ class KeyValueProxyRunnerTest(unittest.TestCase):
         self.assertEqual(service.proxyScrapeProxy.proxyTypeStr, "http")
         self.assertEqual(service.proxyScrapeProxy.sslFilterStr, "yes")
         self.assertEqual(service.proxyScrapeProxy.anonymityFilterStr, "elite")
+        self.assertEqual(service.geonodeFreeProxyListProxy.timeoutSecondInt, 6)
         self.assertEqual(
             service.elasticIpHealthCheckProxy.targetUrlStr,
             "https://target.example.test/ip",

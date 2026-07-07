@@ -1,0 +1,29 @@
+{
+  "url": "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&anonymityLevel=elite&filterUpTime=80",
+  "status_code": 200,
+  "proxy_candidate_text": "proxy-one.example.net:8080\nproxy-two.example.net:3128\n",
+  "proxy_candidate_metadata_list": [
+    {
+      "proxy": "proxy-one.example.net:8080",
+      "protocols": [
+        "http"
+      ],
+      "country": "US",
+      "anonymityLevel": "elite",
+      "upTime": 98.5,
+      "latency": 120.5,
+      "responseTime": 350
+    },
+    {
+      "proxy": "proxy-two.example.net:3128",
+      "protocols": [
+        "https"
+      ],
+      "country": "CA",
+      "anonymityLevel": "elite",
+      "upTime": 96,
+      "latency": 155,
+      "responseTime": 420
+    }
+  ]
+}

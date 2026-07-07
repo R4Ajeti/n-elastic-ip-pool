@@ -15,6 +15,9 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
     MAX_PROXY_USAGE_COUNT_INT,
+    PROXY_SOURCE_GEONODE_FREE_DISCOVERED_PROXY_STR,
+    PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
+    PROXY_SOURCE_SAVED_PROXY_STR,
     PROXY_SELECTION_MODE_RANDOM_STR,
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
@@ -22,6 +25,10 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
 from n_elastic_ip_pool.helper.proxy_address_format_helper import normalizeProxyAddress
 from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import (
+    GeonodeFreeProxyListProxy,
+    GeonodeFreeProxyListProxyError,
+)
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy, KeyValStoreProxyError
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy, ProxyScrapeProxyError
 from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
@@ -39,6 +46,7 @@ class ElasticIpPoolService:
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         keyValStoreProxy: KeyValStoreProxy | None = None,
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
+        geonodeFreeProxyListProxy: GeonodeFreeProxyListProxy | None = None,
         proxyUsageHistoryRepo: FirebaseProxyUsageHistoryRepo | None = None,
         keyValStoreProxyStr: str = KEY_VAL_DUMMY_PROXY_KEY_STR,
         dummyProxyValueStr: str = KEY_VAL_DUMMY_PROXY_VALUE_STR,
@@ -64,6 +72,9 @@ class ElasticIpPoolService:
         self.hasInjectedKeyValStoreProxyBool = keyValStoreProxy is not None
         self.keyValStoreProxy = keyValStoreProxy or KeyValStoreProxy()
         self.proxyScrapeProxy = proxyScrapeProxy or ProxyScrapeProxy()
+        self.geonodeFreeProxyListProxy = (
+            geonodeFreeProxyListProxy or GeonodeFreeProxyListProxy()
+        )
         self.keyValStoreProxyStr = keyValStoreProxyStr
         self.dummyProxyValueStr = dummyProxyValueStr
         self.proxyValidationSuccessCountInt = max(
@@ -144,13 +155,29 @@ class ElasticIpPoolService:
         selectedProxyStr = str(selectedProxyDict["proxy"])
         self.recordSuccessfulProxyUsage(
             selectedProxyStr,
-            self.buildProxyUsageRecord(selectedProxyDict, "saved_proxy"),
+            self.buildProxyUsageRecord(selectedProxyDict, PROXY_SOURCE_SAVED_PROXY_STR),
         )
 
         return selectedProxyStr
 
     def search(self) -> str | None:
-        proxyCandidateTextStr = self.fetchProxyCandidateText()
+        proxyScrapeResultStr = self.searchProviderProxyCandidateList(
+            PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
+            self.fetchProxyScrapeCandidateText(),
+        )
+        if proxyScrapeResultStr:
+            return proxyScrapeResultStr
+
+        return self.searchProviderProxyCandidateList(
+            PROXY_SOURCE_GEONODE_FREE_DISCOVERED_PROXY_STR,
+            self.fetchGeonodeFreeProxyCandidateText(),
+        )
+
+    def searchProviderProxyCandidateList(
+        self,
+        sourceNameStr: str,
+        proxyCandidateTextStr: str,
+    ) -> str | None:
         proxyCandidateList = self.parseProxyCandidateList(proxyCandidateTextStr)
         if not proxyCandidateList:
             return None
@@ -179,7 +206,7 @@ class ElasticIpPoolService:
 
         self.recordSuccessfulProxyUsage(
             selectedProxyStr,
-            self.buildProxyUsageRecord(selectedProxyDict, "discovered_proxy"),
+            self.buildProxyUsageRecord(selectedProxyDict, sourceNameStr),
         )
 
         return selectedProxyStr
@@ -206,9 +233,24 @@ class ElasticIpPoolService:
         return str(resultDict.get("value") or valueStr)
 
     def fetchProxyCandidateText(self) -> str:
+        return self.fetchProxyScrapeCandidateText()
+
+    def fetchProxyScrapeCandidateText(self) -> str:
         try:
             resultDict = self.proxyScrapeProxy.fetchProxyCandidateText()
         except ProxyScrapeProxyError:
+            return ""
+
+        statusCodeInt = int(resultDict.get("status_code") or 0)
+        if statusCodeInt < 200 or statusCodeInt >= 300:
+            return ""
+
+        return str(resultDict.get("proxy_candidate_text") or "")
+
+    def fetchGeonodeFreeProxyCandidateText(self) -> str:
+        try:
+            resultDict = self.geonodeFreeProxyListProxy.fetchProxyCandidateText()
+        except GeonodeFreeProxyListProxyError:
             return ""
 
         statusCodeInt = int(resultDict.get("status_code") or 0)

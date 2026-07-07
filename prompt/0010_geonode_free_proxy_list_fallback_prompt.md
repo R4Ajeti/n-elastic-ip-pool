@@ -31,6 +31,12 @@ Use this public Geonode endpoint shape:
 https://proxylist.geonode.com/api/proxy-list
 ```
 
+The free endpoint can return 500 records at a time with:
+
+```text
+https://proxylist.geonode.com/api/proxy-list?limit=500
+```
+
 The Geonode free proxy list returns JSON with a top-level `data` list. Each item may include fields such as:
 
 ```text
@@ -55,7 +61,7 @@ Add typed constants and constructor defaults for the Geonode proxy:
 
 ```text
 GEONODE_FREE_PROXY_LIST_API_BASE_URL_STR = "https://proxylist.geonode.com/api/proxy-list"
-GEONODE_FREE_PROXY_LIST_LIMIT_INT = 100
+GEONODE_FREE_PROXY_LIST_LIMIT_INT = 500
 GEONODE_FREE_PROXY_LIST_PAGE_INT = 1
 GEONODE_FREE_PROXY_LIST_SORT_BY_STR = "lastChecked"
 GEONODE_FREE_PROXY_LIST_SORT_TYPE_STR = "desc"
@@ -67,7 +73,7 @@ GEONODE_FREE_PROXY_LIST_MIN_UPTIME_INT = 80
 Use URL query parameters similar to:
 
 ```text
-limit=100
+limit=500
 page=1
 sort_by=lastChecked
 sort_type=desc
@@ -195,7 +201,7 @@ raw/proxy/geonode_free_proxy_list_proxy/json/output.json
 ```json
 {
   "baseUrl": "https://proxylist.geonode.com/api/proxy-list",
-  "limit": 100,
+  "limit": 500,
   "page": 1,
   "sortBy": "lastChecked",
   "sortType": "desc",
@@ -211,7 +217,7 @@ Example:
 
 ```json
 {
-  "url": "https://proxylist.geonode.com/api/proxy-list?limit=100&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&anonymityLevel=elite&filterUpTime=80",
+  "url": "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&anonymityLevel=elite&filterUpTime=80",
   "status_code": 200,
   "proxy_candidate_text": "proxy-one.example.net:8080\nproxy-two.example.net:3128\n",
   "proxy_candidate_metadata_list": [

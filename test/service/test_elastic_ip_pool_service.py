@@ -5,10 +5,15 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_MAX_VALUE_LENGTH_INT,
     MAX_PROXY_USAGE_COUNT_INT,
+    PROXY_SOURCE_GEONODE_FREE_DISCOVERED_PROXY_STR,
+    PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
     PROXY_SELECTION_MODE_RANDOM_STR,
 )
 from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import (
+    GeonodeFreeProxyListProxyError,
+)
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxyError
 from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
@@ -85,6 +90,30 @@ class FakeProxyScrapeProxy:
 
         return {
             "url": "https://proxy.example.test",
+            "status_code": self.statusCodeInt,
+            "proxy_candidate_text": self.responseTextStr,
+        }
+
+
+class FakeGeonodeFreeProxyListProxy:
+    def __init__(
+        self,
+        responseTextStr: str = "",
+        statusCodeInt: int = 200,
+        error: Exception | None = None,
+    ) -> None:
+        self.responseTextStr = responseTextStr
+        self.statusCodeInt = statusCodeInt
+        self.error = error
+        self.fetchCallCountInt = 0
+
+    def fetchProxyCandidateText(self) -> dict:
+        self.fetchCallCountInt += 1
+        if self.error:
+            raise self.error
+
+        return {
+            "url": "https://geonode.example.test",
             "status_code": self.statusCodeInt,
             "proxy_candidate_text": self.responseTextStr,
         }
@@ -260,6 +289,9 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
     def testSearchFetchesProxiesFromProxyScrape(self) -> None:
         proxyScrapeProxy = FakeProxyScrapeProxy("proxy-new.example.net:8080\n")
+        geonodeFreeProxyListProxy = FakeGeonodeFreeProxyListProxy(
+            "geonode-new.example.net:8080\n",
+        )
         service = ElasticIpPoolService(
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
                 {
@@ -272,11 +304,13 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             keyValStoreProxy=FakeKeyValStoreProxy(),
             proxyScrapeProxy=proxyScrapeProxy,
+            geonodeFreeProxyListProxy=geonodeFreeProxyListProxy,
         )
 
         service.search()
 
         self.assertEqual(proxyScrapeProxy.fetchCallCountInt, 1)
+        self.assertEqual(geonodeFreeProxyListProxy.fetchCallCountInt, 0)
 
     def testParseProxyCandidateListRemovesDuplicates(self) -> None:
         service = ElasticIpPoolService(
@@ -441,6 +475,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy("proxy-slow.example.net:8080\n"),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
         resultStr = service.search()
@@ -454,6 +489,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy(""),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
         resultStr = service.search()
@@ -468,11 +504,230 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy(error=ProxyScrapeProxyError("down")),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
         self.assertIsNone(service.search())
         self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
         self.assertEqual(keyValStoreProxy.setValueStr, "")
+
+    def testSearchFallsBackToGeonodeWhenProxyScrapeFetchFails(self) -> None:
+        geonodeFreeProxyListProxy = FakeGeonodeFreeProxyListProxy(
+            "geonode-one.example.net:8080\n",
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "geonode-one.example.net:8080": [
+                        buildTestResult("geonode-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(error=ProxyScrapeProxyError("down")),
+            geonodeFreeProxyListProxy=geonodeFreeProxyListProxy,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "geonode-one.example.net:8080")
+        self.assertEqual(geonodeFreeProxyListProxy.fetchCallCountInt, 1)
+
+    def testSearchFallsBackToGeonodeWhenProxyScrapeCandidateDataIsMalformed(
+        self,
+    ) -> None:
+        geonodeFreeProxyListProxy = FakeGeonodeFreeProxyListProxy(
+            "geonode-one.example.net:8080\n",
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "geonode-one.example.net:8080": [
+                        buildTestResult("geonode-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy("not-a-proxy\nalso-bad\n"),
+            geonodeFreeProxyListProxy=geonodeFreeProxyListProxy,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "geonode-one.example.net:8080")
+        self.assertEqual(geonodeFreeProxyListProxy.fetchCallCountInt, 1)
+
+    def testSearchFallsBackToGeonodeWhenProxyScrapeCandidatesFailValidation(
+        self,
+    ) -> None:
+        healthCheckProxy = FakeElasticIpHealthCheckProxy(
+            {
+                "proxyscrape-bad.example.net:8080": [
+                    buildTestResult(
+                        "proxyscrape-bad.example.net:8080",
+                        False,
+                        None,
+                        "timeout",
+                    ),
+                ],
+                "geonode-one.example.net:8080": [
+                    buildTestResult("geonode-one.example.net:8080", True, 90),
+                ],
+            },
+        )
+        geonodeFreeProxyListProxy = FakeGeonodeFreeProxyListProxy(
+            "geonode-one.example.net:8080\n",
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=healthCheckProxy,
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy("proxyscrape-bad.example.net:8080\n"),
+            geonodeFreeProxyListProxy=geonodeFreeProxyListProxy,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "geonode-one.example.net:8080")
+        self.assertEqual(geonodeFreeProxyListProxy.fetchCallCountInt, 1)
+        self.assertEqual(
+            healthCheckProxy.testCallList,
+            ["proxyscrape-bad.example.net:8080", "geonode-one.example.net:8080"],
+        )
+
+    def testSearchReturnsFastestValidatedGeonodeProxyWhenFallbackSucceeds(
+        self,
+    ) -> None:
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "geonode-slow.example.net:8080": [
+                        buildTestResult("geonode-slow.example.net:8080", True, 300),
+                    ],
+                    "geonode-fast.example.net:8080": [
+                        buildTestResult("geonode-fast.example.net:8080", True, 80),
+                    ],
+                },
+            ),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(""),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(
+                "geonode-slow.example.net:8080\n"
+                "geonode-fast.example.net:8080\n",
+            ),
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "geonode-fast.example.net:8080")
+        self.assertEqual(
+            service.rankedProxyList,
+            ["geonode-fast.example.net:8080", "geonode-slow.example.net:8080"],
+        )
+
+    def testSearchReturnsNoneWhenBothDiscoveryProvidersFail(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy(error=ProxyScrapeProxyError("down")),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(
+                error=GeonodeFreeProxyListProxyError("down"),
+            ),
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertIsNone(resultStr)
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+
+    def testSearchSavesWorkingGeonodeProxyWhenSaveConfigurationAllowsIt(
+        self,
+    ) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "geonode-one.example.net:8080": [
+                        buildTestResult("geonode-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy(""),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(
+                "geonode-one.example.net:8080\n",
+            ),
+            keyValStoreProxyStr="custom-key-source",
+            saveWorkingProxyBool=True,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+        savedList = json.loads(keyValStoreProxy.setValueStr)
+
+        self.assertEqual(resultStr, "geonode-one.example.net:8080")
+        self.assertEqual(savedList, ["geonode-one.example.net:8080"])
+
+    def testSearchDoesNotSaveWorkingGeonodeProxyWhenSaveDisabled(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "geonode-one.example.net:8080": [
+                        buildTestResult("geonode-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy(""),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(
+                "geonode-one.example.net:8080\n",
+            ),
+            saveWorkingProxyBool=False,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "geonode-one.example.net:8080")
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
+
+    def testSearchRecordsSuccessfulGeonodeFallbackUsageThroughRepo(self) -> None:
+        usageHistoryRepo = FakeProxyUsageHistoryRepo()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "geonode-one.example.net:8080": [
+                        buildTestResult("geonode-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(""),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(
+                "geonode-one.example.net:8080\n",
+            ),
+            proxyUsageHistoryRepo=usageHistoryRepo,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "geonode-one.example.net:8080")
+        self.assertEqual(
+            usageHistoryRepo.recordProxyUsageCallList[0][0],
+            "geonode-one.example.net:8080",
+        )
+        self.assertEqual(
+            usageHistoryRepo.recordProxyUsageCallList[0][1]["source"],
+            PROXY_SOURCE_GEONODE_FREE_DISCOVERED_PROXY_STR,
+        )
 
     def testGetHandlesCorruptedKeyValData(self) -> None:
         service = ElasticIpPoolService(
@@ -719,6 +974,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy("proxy-new.example.net:8080\n"),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
         resultStr = service.search()
@@ -784,7 +1040,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         )
         self.assertEqual(
             usageHistoryRepo.recordProxyUsageCallList[0][1]["source"],
-            "discovered_proxy",
+            PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
         )
 
     def testSearchSkipsAndDisablesProxyAtHistoricUsageLimit(self) -> None:
@@ -808,6 +1064,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             proxyUsageHistoryRepo=usageHistoryRepo,
             proxyValidationSuccessCountInt=1,
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
         resultStr = service.search()
@@ -848,6 +1105,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             proxyUsageHistoryRepo=usageHistoryRepo,
             proxyValidationSuccessCountInt=1,
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
         resultStr = service.search()

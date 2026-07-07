@@ -32,6 +32,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
 )
 from n_elastic_ip_pool.helper.env_value_helper import getEnvValue
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import GeonodeFreeProxyListProxy
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
 from n_elastic_ip_pool.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
@@ -146,7 +147,7 @@ def buildArgumentParser() -> argparse.ArgumentParser:
         dest="providerTimeoutSecondInt",
         type=int,
         default=None,
-        help="Network timeout for ProxyScrape and KeyVal requests.",
+        help="Network timeout for ProxyScrape, Geonode, and KeyVal requests.",
     )
     parser.add_argument(
         "--country",
@@ -345,6 +346,9 @@ def buildVerboseElasticIpPoolService(
         anonymityFilterStr=str(runOptionDict["anonymityFilterStr"]),
         timeoutSecondInt=providerTimeoutSecondInt,
     )
+    geonodeFreeProxyListProxy = GeonodeFreeProxyListProxy(
+        timeoutSecondInt=providerTimeoutSecondInt,
+    )
     elasticIpHealthCheckProxy = ElasticIpHealthCheckProxy(
         targetUrlStr=str(runOptionDict["targetUrlStr"]),
         timeoutMillisecondInt=proxyMaxTimingMillisecondInt,
@@ -355,6 +359,7 @@ def buildVerboseElasticIpPoolService(
         keyValStoreProxy=keyValStoreProxy,
         elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
         proxyScrapeProxy=proxyScrapeProxy,
+        geonodeFreeProxyListProxy=geonodeFreeProxyListProxy,
         loggerLevelStr=runOptionDict["loggerLevelStr"],
         proxyValidationSuccessCountInt=int(
             runOptionDict["proxyValidationSuccessCountInt"],

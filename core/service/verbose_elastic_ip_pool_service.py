@@ -24,6 +24,7 @@ from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
     redactUrlPathValue,
 )
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import GeonodeFreeProxyListProxy
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
 from n_elastic_ip_pool.repo.firebase_proxy_usage_history_repo import (
@@ -42,6 +43,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         keyValStoreProxy: KeyValStoreProxy | None = None,
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
+        geonodeFreeProxyListProxy: GeonodeFreeProxyListProxy | None = None,
         proxyUsageHistoryRepo: FirebaseProxyUsageHistoryRepo | None = None,
         loggerLevelStr: str | None = None,
         proxyValidationSuccessCountInt: int = PROXY_VALIDATION_SUCCESS_COUNT_INT,
@@ -62,6 +64,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=proxyScrapeProxy,
+            geonodeFreeProxyListProxy=geonodeFreeProxyListProxy,
             proxyUsageHistoryRepo=proxyUsageHistoryRepo,
             keyValStoreProxyStr=keyValStoreProxyStr,
             dummyProxyValueStr=dummyProxyValueStr,
@@ -146,18 +149,40 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             self.logInfo("[discovery] took", self.getElapsedSecondStr(startFloat), "seconds")
 
     def fetchProxyCandidateText(self) -> str:
+        return self.fetchProxyScrapeCandidateText()
+
+    def fetchProxyScrapeCandidateText(self) -> str:
         if hasattr(self.proxyScrapeProxy, "buildFetchUrl"):
             self.logDebug("[proxyscrape] request URL:", self.proxyScrapeProxy.buildFetchUrl())
         else:
             self.logDebug("[proxyscrape] request URL: unavailable from injected proxy")
 
-        proxyCandidateTextStr = super().fetchProxyCandidateText()
+        proxyCandidateTextStr = super().fetchProxyScrapeCandidateText()
         rawProxyList = [
             lineStr.strip()
             for lineStr in proxyCandidateTextStr.splitlines()
             if lineStr.strip()
         ]
         self.logInfo("[proxyscrape] returned proxy rows:", len(rawProxyList))
+
+        return proxyCandidateTextStr
+
+    def fetchGeonodeFreeProxyCandidateText(self) -> str:
+        if hasattr(self.geonodeFreeProxyListProxy, "buildFetchUrl"):
+            self.logDebug(
+                "[geonode] request URL:",
+                self.geonodeFreeProxyListProxy.buildFetchUrl(),
+            )
+        else:
+            self.logDebug("[geonode] request URL: unavailable from injected proxy")
+
+        proxyCandidateTextStr = super().fetchGeonodeFreeProxyCandidateText()
+        rawProxyList = [
+            lineStr.strip()
+            for lineStr in proxyCandidateTextStr.splitlines()
+            if lineStr.strip()
+        ]
+        self.logInfo("[geonode] returned proxy rows:", len(rawProxyList))
 
         return proxyCandidateTextStr
 

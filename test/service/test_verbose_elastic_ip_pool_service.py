@@ -58,6 +58,18 @@ class FakeProxyScrapeProxy:
         }
 
 
+class FakeGeonodeFreeProxyListProxy:
+    def buildFetchUrl(self) -> str:
+        return "https://geonode.example.test/api/proxy-list?limit=500"
+
+    def fetchProxyCandidateText(self) -> dict:
+        return {
+            "url": "https://geonode.example.test",
+            "status_code": 200,
+            "proxy_candidate_text": "",
+        }
+
+
 class FakeElasticIpHealthCheckProxy:
     def testProxy(self, proxyStr: str) -> dict:
         return {
@@ -90,6 +102,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             keyValStoreProxy=keyValStoreProxy,
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
             proxyScrapeProxy=FakeProxyScrapeProxy(),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
         expectedKeyStr = hashStringValue("custom-key-source")
 
@@ -210,6 +223,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             keyValStoreProxy=keyValStoreProxy,
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
             proxyScrapeProxy=FakeProxyScrapeProxy(),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
             loggerLevelStr="DEBUG",
         )
 
@@ -235,6 +249,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
                 keyValStoreProxy=keyValStoreProxy,
                 elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
                 proxyScrapeProxy=FakeProxyScrapeProxy(),
+                geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
             )
 
         with patch("builtins.print") as printMock:
@@ -257,6 +272,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
                 keyValStoreProxy=keyValStoreProxy,
                 elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
                 proxyScrapeProxy=FakeProxyScrapeProxy(),
+                geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
             )
 
         with patch("builtins.print") as printMock:

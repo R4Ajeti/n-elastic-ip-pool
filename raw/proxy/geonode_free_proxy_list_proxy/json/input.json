@@ -1,0 +1,11 @@
+{
+  "baseUrl": "https://proxylist.geonode.com/api/proxy-list",
+  "limit": 500,
+  "page": 1,
+  "sortBy": "lastChecked",
+  "sortType": "desc",
+  "protocols": "http,https",
+  "anonymityLevel": "elite",
+  "filterUpTime": 80,
+  "timeoutSecond": 10
+}
