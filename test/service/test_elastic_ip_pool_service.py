@@ -163,7 +163,8 @@ class FakeProxyUsageHistoryRepo:
         usageRecordDict: dict | None = None,
     ) -> dict:
         self.recordProxyUsageCallList.append((proxyStr, usageRecordDict))
-        self.usageCountByProxyDict[proxyStr] = self.getProxyUsageCount(proxyStr) + 1
+        currentUsageCountInt = int(self.usageCountByProxyDict.get(proxyStr, 0))
+        self.usageCountByProxyDict[proxyStr] = currentUsageCountInt + 1
         return {
             "proxy": proxyStr,
             "usage_count": self.usageCountByProxyDict[proxyStr],
