@@ -14,6 +14,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     LOGGER_LEVEL_DEBUG_STR,
     LOGGER_LEVEL_ENV_NAME_STR,
     LOGGER_LEVEL_INFO_STR,
+    MAX_PROXY_USAGE_COUNT_INT,
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
@@ -25,6 +26,9 @@ from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
+from n_elastic_ip_pool.repo.firebase_proxy_usage_history_repo import (
+    FirebaseProxyUsageHistoryRepo,
+)
 from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
 
@@ -38,6 +42,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         keyValStoreProxy: KeyValStoreProxy | None = None,
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
+        proxyUsageHistoryRepo: FirebaseProxyUsageHistoryRepo | None = None,
         loggerLevelStr: str | None = None,
         proxyValidationSuccessCountInt: int = PROXY_VALIDATION_SUCCESS_COUNT_INT,
         proxyMaxTimingMillisecondInt: int = PROXY_MAX_TIMING_MILLISECOND_INT,
@@ -46,6 +51,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         proxyCandidateLimitInt: int = DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
         proxyShuffleCandidateBool: bool = DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
         proxyRandomSeedInt: int | None = None,
+        maxProxyUsageCountInt: int = MAX_PROXY_USAGE_COUNT_INT,
         useSavedProxyBool: bool = DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
         saveWorkingProxyBool: bool = DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
         releaseChannelStr: str = DEFAULT_PROXY_RELEASE_CHANNEL_STR,
@@ -56,6 +62,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=proxyScrapeProxy,
+            proxyUsageHistoryRepo=proxyUsageHistoryRepo,
             keyValStoreProxyStr=keyValStoreProxyStr,
             dummyProxyValueStr=dummyProxyValueStr,
             proxyValidationSuccessCountInt=proxyValidationSuccessCountInt,
@@ -65,6 +72,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             proxyCandidateLimitInt=proxyCandidateLimitInt,
             proxyShuffleCandidateBool=proxyShuffleCandidateBool,
             proxyRandomSeedInt=proxyRandomSeedInt,
+            maxProxyUsageCountInt=maxProxyUsageCountInt,
             useSavedProxyBool=useSavedProxyBool,
             saveWorkingProxyBool=saveWorkingProxyBool,
             releaseChannelStr=releaseChannelStr,
@@ -92,6 +100,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             f"shuffleCandidates={self.proxyShuffleCandidateBool}",
             f"validationCount={self.proxyValidationSuccessCountInt}",
             f"maxTimingMs={self.proxyMaxTimingMillisecondInt}",
+            f"usageLimit={self.maxProxyUsageCountInt}",
             f"useCache={self.useSavedProxyBool}",
             f"save={self.saveWorkingProxyBool}",
         )
@@ -231,6 +240,9 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
 
         self.logInfo("[cache] save skipped: disabled")
         return None
+
+    def onProxyUsageHistoryFailure(self, error: Exception) -> None:
+        self.logDebug("[usage-history] skipped:", error.__class__.__name__)
 
     def check(self) -> str | None:
         self.logInfo("[cache] checking saved proxy list")

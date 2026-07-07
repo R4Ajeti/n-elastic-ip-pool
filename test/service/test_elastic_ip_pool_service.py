@@ -4,6 +4,7 @@ import unittest
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_MAX_VALUE_LENGTH_INT,
+    MAX_PROXY_USAGE_COUNT_INT,
     PROXY_SELECTION_MODE_RANDOM_STR,
 )
 from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
@@ -104,6 +105,46 @@ class FakeElasticIpHealthCheckProxy:
             return buildTestResult(proxyStr, False, None, "missing_mock")
 
         return resultList.pop(0)
+
+
+class FakeProxyUsageHistoryRepo:
+    def __init__(
+        self,
+        usageCountByProxyDict: dict[str, int] | None = None,
+        disabledProxySet: set[str] | None = None,
+    ) -> None:
+        self.usageCountByProxyDict = dict(usageCountByProxyDict or {})
+        self.disabledProxySet = set(disabledProxySet or set())
+        self.recordProxyUsageCallList: list[tuple[str, dict | None]] = []
+        self.markProxyDisabledCallList: list[str] = []
+
+    def getProxyUsageCount(self, proxyStr: str) -> int:
+        return int(self.usageCountByProxyDict.get(proxyStr, 0))
+
+    def isProxyDisabled(self, proxyStr: str) -> bool:
+        return proxyStr in self.disabledProxySet
+
+    def recordProxyUsage(
+        self,
+        proxyStr: str,
+        usageRecordDict: dict | None = None,
+    ) -> dict:
+        self.recordProxyUsageCallList.append((proxyStr, usageRecordDict))
+        self.usageCountByProxyDict[proxyStr] = self.getProxyUsageCount(proxyStr) + 1
+        return {
+            "proxy": proxyStr,
+            "usage_count": self.usageCountByProxyDict[proxyStr],
+            "disabled": proxyStr in self.disabledProxySet,
+        }
+
+    def markProxyDisabled(self, proxyStr: str) -> dict:
+        self.markProxyDisabledCallList.append(proxyStr)
+        self.disabledProxySet.add(proxyStr)
+        return {
+            "proxy": proxyStr,
+            "usage_count": self.getProxyUsageCount(proxyStr),
+            "disabled": True,
+        }
 
 
 class ElasticIpPoolServiceTest(unittest.TestCase):
@@ -717,6 +758,103 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             keyValStoreProxy.setValueStr,
             '["proxy-one.example.net:8080"]',
         )
+
+    def testSearchRecordsSuccessfulProxyUsageThroughRepo(self) -> None:
+        usageHistoryRepo = FakeProxyUsageHistoryRepo()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-one.example.net:8080": [
+                        buildTestResult("proxy-one.example.net:8080", True, 90),
+                    ],
+                },
+            ),
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy("proxy-one.example.net:8080\n"),
+            proxyUsageHistoryRepo=usageHistoryRepo,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "proxy-one.example.net:8080")
+        self.assertEqual(
+            usageHistoryRepo.recordProxyUsageCallList[0][0],
+            "proxy-one.example.net:8080",
+        )
+        self.assertEqual(
+            usageHistoryRepo.recordProxyUsageCallList[0][1]["source"],
+            "discovered_proxy",
+        )
+
+    def testSearchSkipsAndDisablesProxyAtHistoricUsageLimit(self) -> None:
+        usageHistoryRepo = FakeProxyUsageHistoryRepo(
+            usageCountByProxyDict={
+                "proxy-one.example.net:8080": MAX_PROXY_USAGE_COUNT_INT,
+            },
+        )
+        healthCheckProxy = FakeElasticIpHealthCheckProxy(
+            {
+                "proxy-two.example.net:8080": [
+                    buildTestResult("proxy-two.example.net:8080", True, 100),
+                ],
+            },
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=healthCheckProxy,
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(
+                "proxy-one.example.net:8080\nproxy-two.example.net:8080\n",
+            ),
+            proxyUsageHistoryRepo=usageHistoryRepo,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "proxy-two.example.net:8080")
+        self.assertEqual(healthCheckProxy.testCallList, ["proxy-two.example.net:8080"])
+        self.assertIn(
+            "proxy-one.example.net:8080",
+            usageHistoryRepo.markProxyDisabledCallList,
+        )
+
+    def testSearchReturnsNoneWhenAllCandidatesFailedDisabledOrOverused(self) -> None:
+        usageHistoryRepo = FakeProxyUsageHistoryRepo(
+            usageCountByProxyDict={
+                "proxy-two.example.net:8080": MAX_PROXY_USAGE_COUNT_INT,
+            },
+            disabledProxySet={"proxy-one.example.net:8080"},
+        )
+        healthCheckProxy = FakeElasticIpHealthCheckProxy(
+            {
+                "proxy-three.example.net:8080": [
+                    buildTestResult(
+                        "proxy-three.example.net:8080",
+                        False,
+                        None,
+                        "timeout",
+                    ),
+                ],
+            },
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=healthCheckProxy,
+            keyValStoreProxy=FakeKeyValStoreProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(
+                "proxy-one.example.net:8080\n"
+                "proxy-two.example.net:8080\n"
+                "proxy-three.example.net:8080\n",
+            ),
+            proxyUsageHistoryRepo=usageHistoryRepo,
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertIsNone(resultStr)
+        self.assertEqual(healthCheckProxy.testCallList, ["proxy-three.example.net:8080"])
+        self.assertEqual(usageHistoryRepo.recordProxyUsageCallList, [])
 
     @unittest.skip("Placeholder until Elastic IP pool selection rules are implemented.")
     def testGetAvailableResourceReturnsOnlyUsableResource(self) -> None:

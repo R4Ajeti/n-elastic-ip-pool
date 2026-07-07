@@ -71,6 +71,42 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
             elastic_ip_pool_constant.PROXY_MAX_TIMING_MILLISECOND_INT,
             int,
         )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.FIREBASE_DATABASE_TYPE_ENV_NAME_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.FIREBASE_FIRESTORE_KEY_BASE64_ENV_NAME_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.FIREBASE_REALTIME_DATABASE_KEY_BASE64_ENV_NAME_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.FIREBASE_REALTIME_DATABASE_URL_ENV_NAME_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.FIREBASE_DATABASE_TYPE_FIRESTORE_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.FIREBASE_DATABASE_TYPE_REALTIME_DATABASE_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.MAX_PROXY_USAGE_COUNT_INT,
+            int,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_FIREBASE_COLLECTION_NAME_STR,
+            str,
+        )
+        self.assertIsInstance(
+            elastic_ip_pool_constant.DEFAULT_FIREBASE_USAGE_HISTORY_PATH_STR,
+            str,
+        )
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_MAX_VALUE_LENGTH_INT,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
+    MAX_PROXY_USAGE_COUNT_INT,
     PROXY_SELECTION_MODE_RANDOM_STR,
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
@@ -24,6 +25,9 @@ from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealt
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy, KeyValStoreProxyError
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy, ProxyScrapeProxyError
 from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
+from n_elastic_ip_pool.repo.firebase_proxy_usage_history_repo import (
+    FirebaseProxyUsageHistoryRepo,
+)
 
 
 class ElasticIpPoolService:
@@ -35,6 +39,7 @@ class ElasticIpPoolService:
         elasticIpHealthCheckProxy: ElasticIpHealthCheckProxy | None = None,
         keyValStoreProxy: KeyValStoreProxy | None = None,
         proxyScrapeProxy: ProxyScrapeProxy | None = None,
+        proxyUsageHistoryRepo: FirebaseProxyUsageHistoryRepo | None = None,
         keyValStoreProxyStr: str = KEY_VAL_DUMMY_PROXY_KEY_STR,
         dummyProxyValueStr: str = KEY_VAL_DUMMY_PROXY_VALUE_STR,
         proxyValidationSuccessCountInt: int = PROXY_VALIDATION_SUCCESS_COUNT_INT,
@@ -44,11 +49,15 @@ class ElasticIpPoolService:
         proxyCandidateLimitInt: int = DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
         proxyShuffleCandidateBool: bool = DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
         proxyRandomSeedInt: int | None = None,
+        maxProxyUsageCountInt: int = MAX_PROXY_USAGE_COUNT_INT,
         useSavedProxyBool: bool = DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
         saveWorkingProxyBool: bool = DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
         releaseChannelStr: str = DEFAULT_PROXY_RELEASE_CHANNEL_STR,
     ) -> None:
         self.elasticIpPoolRepo = elasticIpPoolRepo or ElasticIpPoolRepo()
+        self.proxyUsageHistoryRepo = (
+            proxyUsageHistoryRepo or FirebaseProxyUsageHistoryRepo()
+        )
         self.elasticIpHealthCheckProxy = (
             elasticIpHealthCheckProxy or ElasticIpHealthCheckProxy()
         )
@@ -73,6 +82,7 @@ class ElasticIpPoolService:
         self.proxyShuffleCandidateBool = bool(proxyShuffleCandidateBool)
         self.proxyRandomSeedInt = proxyRandomSeedInt
         self.proxyRandom = random.Random(proxyRandomSeedInt)
+        self.maxProxyUsageCountInt = max(1, int(maxProxyUsageCountInt or 1))
         self.useSavedProxyBool = bool(useSavedProxyBool)
         self.saveWorkingProxyBool = bool(saveWorkingProxyBool)
         self.releaseChannelStr = str(
@@ -105,7 +115,11 @@ class ElasticIpPoolService:
 
         workingProxyList = []
         for savedProxyDict in savedProxyList:
-            testResultDict = self.testProxy(str(savedProxyDict["proxy"]))
+            proxyStr = str(savedProxyDict["proxy"])
+            if not self.isProxyUsageAllowed(proxyStr):
+                continue
+
+            testResultDict = self.testProxy(proxyStr)
             if self.isProxyTestResultUsable(testResultDict):
                 workingProxyList.append(
                     self.buildWorkingProxyRecord(
@@ -126,7 +140,14 @@ class ElasticIpPoolService:
             for proxyDict in self.rankedProxyDictList
         ]
 
-        return str(self.rankedProxyDictList[0]["proxy"])
+        selectedProxyDict = self.rankedProxyDictList[0]
+        selectedProxyStr = str(selectedProxyDict["proxy"])
+        self.recordSuccessfulProxyUsage(
+            selectedProxyStr,
+            self.buildProxyUsageRecord(selectedProxyDict, "saved_proxy"),
+        )
+
+        return selectedProxyStr
 
     def search(self) -> str | None:
         proxyCandidateTextStr = self.fetchProxyCandidateText()
@@ -145,6 +166,8 @@ class ElasticIpPoolService:
             str(proxyDict["proxy"])
             for proxyDict in self.rankedProxyDictList
         ]
+        selectedProxyDict = self.rankedProxyDictList[0]
+        selectedProxyStr = str(selectedProxyDict["proxy"])
 
         if self.shouldSaveWorkingProxyList():
             try:
@@ -154,7 +177,12 @@ class ElasticIpPoolService:
         else:
             self.onWorkingProxySaveSkipped()
 
-        return str(self.rankedProxyDictList[0]["proxy"])
+        self.recordSuccessfulProxyUsage(
+            selectedProxyStr,
+            self.buildProxyUsageRecord(selectedProxyDict, "discovered_proxy"),
+        )
+
+        return selectedProxyStr
 
     def update(self, valueStr: str) -> str:
         if valueStr is None:
@@ -208,6 +236,12 @@ class ElasticIpPoolService:
 
         if self.proxyShuffleCandidateBool:
             self.proxyRandom.shuffle(preparedProxyCandidateList)
+
+        preparedProxyCandidateList = [
+            proxyStr
+            for proxyStr in preparedProxyCandidateList
+            if self.isProxyUsageAllowed(proxyStr)
+        ]
 
         if self.proxyCandidateLimitInt:
             return preparedProxyCandidateList[: self.proxyCandidateLimitInt]
@@ -263,6 +297,7 @@ class ElasticIpPoolService:
                 "lastCheckedAt": "",
             }
             for proxyStr in proxyCandidateList
+            if self.isProxyUsageAllowed(proxyStr)
         }
 
         for passNumberInt in range(1, self.proxyValidationSuccessCountInt + 1):
@@ -328,6 +363,61 @@ class ElasticIpPoolService:
             return False
 
         return self.getTimingMsInt(testResultDict) <= self.proxyMaxTimingMillisecondInt
+
+    def isProxyUsageAllowed(self, proxyStr: str) -> bool:
+        try:
+            if self.proxyUsageHistoryRepo.isProxyDisabled(proxyStr):
+                return False
+
+            usageCountInt = self.proxyUsageHistoryRepo.getProxyUsageCount(proxyStr)
+        except Exception as error:
+            self.onProxyUsageHistoryFailure(error)
+            return True
+
+        if usageCountInt >= self.maxProxyUsageCountInt:
+            self.markProxyUsageDisabled(proxyStr)
+            return False
+
+        return True
+
+    def recordSuccessfulProxyUsage(
+        self,
+        proxyStr: str,
+        usageRecordDict: dict | None = None,
+    ) -> None:
+        try:
+            resultDict = self.proxyUsageHistoryRepo.recordProxyUsage(
+                proxyStr,
+                usageRecordDict,
+            )
+            usageCountInt = int(
+                resultDict.get("usage_count")
+                or self.proxyUsageHistoryRepo.getProxyUsageCount(proxyStr)
+                or 0,
+            )
+            if usageCountInt >= self.maxProxyUsageCountInt:
+                self.proxyUsageHistoryRepo.markProxyDisabled(proxyStr)
+        except Exception as error:
+            self.onProxyUsageHistoryFailure(error)
+
+    def markProxyUsageDisabled(self, proxyStr: str) -> None:
+        try:
+            self.proxyUsageHistoryRepo.markProxyDisabled(proxyStr)
+        except Exception as error:
+            self.onProxyUsageHistoryFailure(error)
+
+    def buildProxyUsageRecord(self, workingProxyDict: dict, sourceStr: str) -> dict:
+        return {
+            "source": sourceStr,
+            "checked_at": str(workingProxyDict.get("lastCheckedAt") or ""),
+            "average_timing_ms": self.getTimingMsInt(
+                {"timingMs": workingProxyDict.get("averageTimingMs")},
+            ),
+            "success_count": int(workingProxyDict.get("successCount") or 0),
+        }
+
+    def onProxyUsageHistoryFailure(self, error: Exception) -> None:
+        return None
 
     def rankWorkingProxyList(self, workingProxyList: list[dict]) -> list[dict]:
         rankedWorkingProxyList = sorted(
