@@ -1,7 +1,7 @@
 import unittest
 
-from core.helper.ip_address_format_helper import isIpAddressFormatValid
-from core.helper.string_hash_helper import hashStringValue
+from n_elastic_ip_pool.helper.ip_address_format_helper import isIpAddressFormatValid
+from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 
 
 class IpAddressFormatHelperTest(unittest.TestCase):

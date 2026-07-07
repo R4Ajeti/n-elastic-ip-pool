@@ -1,6 +1,6 @@
 import unittest
 
-from core.constant import elastic_ip_pool_constant
+from n_elastic_ip_pool.constant import elastic_ip_pool_constant
 
 
 class ElasticIpPoolConstantTest(unittest.TestCase):

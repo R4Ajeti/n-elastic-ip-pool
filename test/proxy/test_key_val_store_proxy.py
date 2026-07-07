@@ -3,12 +3,12 @@ import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_TIMEOUT_SECOND_INT,
     KEY_VAL_API_BASE_URL_STR,
     KEY_VAL_USER_AGENT_STR,
 )
-from core.proxy.key_val_store_proxy import KeyValStoreProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 
 
 class FakeHttpResponse:
@@ -32,7 +32,7 @@ class FakeHttpResponse:
 class KeyValStoreProxyTest(unittest.TestCase):
     def testGetValueReturnsNormalizedExistingValue(self) -> None:
         with patch(
-            "core.proxy.key_val_store_proxy.urlopen",
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
             return_value=FakeHttpResponse(
                 '{"status":"SUCCESS","key":"sample-key","val":"stored-hash"}',
             ),
@@ -70,7 +70,7 @@ class KeyValStoreProxyTest(unittest.TestCase):
         )
 
         with patch(
-            "core.proxy.key_val_store_proxy.urlopen",
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
             side_effect=notFoundError,
         ):
             resultDict = KeyValStoreProxy().getValue("missing-key")
@@ -88,7 +88,7 @@ class KeyValStoreProxyTest(unittest.TestCase):
 
     def testSetValueReturnsNormalizedStoredValue(self) -> None:
         with patch(
-            "core.proxy.key_val_store_proxy.urlopen",
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
             return_value=FakeHttpResponse(
                 '{"status":"SUCCESS","key":"sample-key","val":"stored-hash"}',
             ),
@@ -115,7 +115,7 @@ class KeyValStoreProxyTest(unittest.TestCase):
 
     def testSetValueMarksProviderFailureAsNotStored(self) -> None:
         with patch(
-            "core.proxy.key_val_store_proxy.urlopen",
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
             return_value=FakeHttpResponse(
                 '{"status":"-KEY-OR-VALUE-TOO-LONG-"}',
             ),

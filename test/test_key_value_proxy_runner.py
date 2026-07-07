@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import patch
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_STORE_PROXY_ENV_NAME_STR,
     LOGGER_LEVEL_DEBUG_STR,
     PROXY_RELEASE_CHANNEL_CANARY_STR,
     PROXY_SELECTION_MODE_RANDOM_STR,
 )
-from testKeyValueProxy import (
+from script.key_value_proxy_runner import (
     buildArgumentParser,
     buildRunOptionDict,
     buildVerboseElasticIpPoolService,
@@ -35,6 +35,7 @@ class KeyValueProxyRunnerTest(unittest.TestCase):
         self.assertTrue(runOptionDict["proxyShuffleCandidateBool"])
         self.assertEqual(runOptionDict["proxyValidationSuccessCountInt"], 2)
         self.assertEqual(runOptionDict["proxyMaxTimingMillisecondInt"], 3500)
+        self.assertFalse(runOptionDict["saveWorkingProxyBool"])
 
     def testBuildServicePassesCustomRunOptions(self) -> None:
         argumentNamespace = buildArgumentParser().parse_args(

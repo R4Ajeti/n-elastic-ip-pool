@@ -1,6 +1,6 @@
 import unittest
 
-from core.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
+from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
 
 
 class ElasticIpPoolRepoTest(unittest.TestCase):

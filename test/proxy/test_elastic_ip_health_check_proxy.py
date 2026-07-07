@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from core.constant.elastic_ip_pool_constant import PROXY_MAX_TIMING_MILLISECOND_INT
-from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import PROXY_MAX_TIMING_MILLISECOND_INT
+from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
 
 
 class FakeHttpResponse:
@@ -40,7 +40,7 @@ class ElasticIpHealthCheckProxyTest(unittest.TestCase):
         fakeOpener = FakeOpener(FakeHttpResponse(200))
 
         with patch(
-            "core.proxy.elastic_ip_health_check_proxy.build_opener",
+            "n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy.build_opener",
             return_value=fakeOpener,
         ):
             resultDict = ElasticIpHealthCheckProxy(timeoutSecondInt=3).testProxy(
@@ -57,7 +57,7 @@ class ElasticIpHealthCheckProxyTest(unittest.TestCase):
         fakeOpener = FakeOpener(error=TimeoutError())
 
         with patch(
-            "core.proxy.elastic_ip_health_check_proxy.build_opener",
+            "n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy.build_opener",
             return_value=fakeOpener,
         ):
             resultDict = ElasticIpHealthCheckProxy().testProxy(
@@ -76,7 +76,7 @@ class ElasticIpHealthCheckProxyTest(unittest.TestCase):
         fakeOpener = FakeOpener(FakeHttpResponse(200))
 
         with patch(
-            "core.proxy.elastic_ip_health_check_proxy.build_opener",
+            "n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy.build_opener",
             return_value=fakeOpener,
         ):
             ElasticIpHealthCheckProxy(timeoutMillisecondInt=1500).testProxy(
@@ -86,7 +86,7 @@ class ElasticIpHealthCheckProxyTest(unittest.TestCase):
         self.assertEqual(fakeOpener.timeoutSecondInt, 1.5)
 
     def testTestProxyRejectsInvalidProxyFormatWithoutNetwork(self) -> None:
-        with patch("core.proxy.elastic_ip_health_check_proxy.build_opener") as openerMock:
+        with patch("n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy.build_opener") as openerMock:
             resultDict = ElasticIpHealthCheckProxy().testProxy("not-a-proxy")
 
         self.assertFalse(resultDict["isWorking"])

@@ -2,7 +2,7 @@ import json
 import random
 from json import JSONDecodeError
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
     DEFAULT_PROXY_RELEASE_CHANNEL_STR,
     DEFAULT_PROXY_RESULT_COUNT_INT,
@@ -18,12 +18,12 @@ from core.constant.elastic_ip_pool_constant import (
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
-from core.helper.proxy_address_format_helper import normalizeProxyAddress
-from core.helper.string_hash_helper import hashStringValue
-from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
-from core.proxy.key_val_store_proxy import KeyValStoreProxy, KeyValStoreProxyError
-from core.proxy.proxy_scrape_proxy import ProxyScrapeProxy, ProxyScrapeProxyError
-from core.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
+from n_elastic_ip_pool.helper.proxy_address_format_helper import normalizeProxyAddress
+from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
+from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy, KeyValStoreProxyError
+from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy, ProxyScrapeProxyError
+from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
 
 
 class ElasticIpPoolService:
@@ -52,6 +52,7 @@ class ElasticIpPoolService:
         self.elasticIpHealthCheckProxy = (
             elasticIpHealthCheckProxy or ElasticIpHealthCheckProxy()
         )
+        self.hasInjectedKeyValStoreProxyBool = keyValStoreProxy is not None
         self.keyValStoreProxy = keyValStoreProxy or KeyValStoreProxy()
         self.proxyScrapeProxy = proxyScrapeProxy or ProxyScrapeProxy()
         self.keyValStoreProxyStr = keyValStoreProxyStr
@@ -145,7 +146,7 @@ class ElasticIpPoolService:
             for proxyDict in self.rankedProxyDictList
         ]
 
-        if self.saveWorkingProxyBool:
+        if self.shouldSaveWorkingProxyList():
             try:
                 self.saveWorkingProxyList(self.rankedProxyDictList)
             except (KeyValStoreProxyError, RuntimeError) as error:
@@ -158,6 +159,12 @@ class ElasticIpPoolService:
     def update(self, valueStr: str) -> str:
         if valueStr is None:
             raise ValueError("valueStr is required before saving to KeyVal.")
+
+        if not self.hasWorkingProxySaveTarget():
+            raise ValueError(
+                "A custom keyValStoreProxyStr or keyValStoreProxy is required "
+                "before saving to KeyVal.",
+            )
 
         keyValKeyStr = self.getKeyValProxyKey()
         resultDict = self.keyValStoreProxy.setValue(
@@ -349,6 +356,23 @@ class ElasticIpPoolService:
             return ""
 
         return self.update(valueStr)
+
+    def shouldSaveWorkingProxyList(self) -> bool:
+        if not self.saveWorkingProxyBool:
+            return False
+
+        return self.hasWorkingProxySaveTarget()
+
+    def hasWorkingProxySaveTarget(self) -> bool:
+        return (
+            self.hasExplicitKeyValStoreProxySource()
+            or self.hasInjectedKeyValStoreProxyBool
+        )
+
+    def hasExplicitKeyValStoreProxySource(self) -> bool:
+        return bool(self.keyValStoreProxyStr) and (
+            self.keyValStoreProxyStr != KEY_VAL_DUMMY_PROXY_KEY_STR
+        )
 
     def buildSavedProxyValueStr(self, workingProxyList: list[dict]) -> str:
         proxyValueList = []

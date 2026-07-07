@@ -3,7 +3,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_TIMEOUT_SECOND_INT,
     PROXY_SCRAPE_ANONYMITY_FILTER_STR,
     PROXY_SCRAPE_API_BASE_URL_STR,

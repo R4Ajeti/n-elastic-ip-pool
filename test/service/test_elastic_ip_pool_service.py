@@ -1,17 +1,17 @@
 import json
 import unittest
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_MAX_VALUE_LENGTH_INT,
     PROXY_SELECTION_MODE_RANDOM_STR,
 )
-from core.helper.string_hash_helper import hashStringValue
-from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
-from core.proxy.key_val_store_proxy import KeyValStoreProxy
-from core.proxy.proxy_scrape_proxy import ProxyScrapeProxyError
-from core.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
-from core.service.elastic_ip_pool_service import ElasticIpPoolService
+from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
+from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
+from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxyError
+from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
+from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
 
 def buildTestResult(
@@ -187,6 +187,8 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             elasticIpHealthCheckProxy=healthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy("proxy-new.example.net:8080\n"),
+            keyValStoreProxyStr="custom-key-source",
+            saveWorkingProxyBool=True,
         )
 
         resultStr = service.get()
@@ -312,6 +314,8 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             proxyScrapeProxy=FakeProxyScrapeProxy(
                 "proxy-one.example.net:8080\nproxy-two.example.net:8080\n",
             ),
+            keyValStoreProxyStr="custom-key-source",
+            saveWorkingProxyBool=True,
         )
 
         resultStr = service.search()
@@ -320,6 +324,27 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         self.assertEqual(resultStr, "proxy-two.example.net:8080")
         self.assertEqual(len(savedList), 1)
         self.assertEqual(savedList[0], "proxy-two.example.net:8080")
+
+    def testSearchDoesNotSaveWorkingProxyListByDefault(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                {
+                    "proxy-new.example.net:8080": [
+                        buildTestResult("proxy-new.example.net:8080", True, 100),
+                    ],
+                },
+            ),
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=FakeProxyScrapeProxy("proxy-new.example.net:8080\n"),
+            proxyValidationSuccessCountInt=1,
+        )
+
+        resultStr = service.search()
+
+        self.assertEqual(resultStr, "proxy-new.example.net:8080")
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueStr, "")
 
     def testRankWorkingProxyListSortsAverageTimingAscending(self) -> None:
         service = ElasticIpPoolService(
@@ -443,6 +468,8 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             keyValStoreProxy=keyValStoreProxy,
             proxyScrapeProxy=FakeProxyScrapeProxy("proxy-new.example.net:8080\n"),
+            keyValStoreProxyStr="custom-key-source",
+            saveWorkingProxyBool=True,
         )
 
         resultStr = service.search()
@@ -459,12 +486,12 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         valueStr = service.buildSavedProxyValueStr(
             [
-                {"proxy": "213.21.254.26:1081"},
-                {"proxy": "72.56.238.99:9090"},
-                {"proxy": "72.56.238.99:1080"},
-                {"proxy": "34.43.46.91:443"},
-                {"proxy": "176.12.65.24:443"},
-                {"proxy": "91.107.182.124:82"},
+                {"proxy": "192.0.2.10:1081"},
+                {"proxy": "198.51.100.20:9090"},
+                {"proxy": "203.0.113.30:1080"},
+                {"proxy": "192.0.2.40:443"},
+                {"proxy": "198.51.100.50:443"},
+                {"proxy": "203.0.113.60:82"},
             ],
         )
         savedProxyList = json.loads(valueStr)
@@ -473,11 +500,11 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         self.assertEqual(
             savedProxyList,
             [
-                "213.21.254.26:1081",
-                "72.56.238.99:9090",
-                "72.56.238.99:1080",
-                "34.43.46.91:443",
-                "176.12.65.24:443",
+                "192.0.2.10:1081",
+                "198.51.100.20:9090",
+                "203.0.113.30:1080",
+                "192.0.2.40:443",
+                "198.51.100.50:443",
             ],
         )
 
@@ -505,6 +532,8 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             ),
             proxyValidationSuccessCountInt=1,
             proxyResultCountInt=2,
+            keyValStoreProxyStr="custom-key-source",
+            saveWorkingProxyBool=True,
         )
 
         resultStr = service.search()
@@ -665,6 +694,12 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
             service.update(None)
 
         self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+
+    def testUpdateRequiresCustomSaveTarget(self) -> None:
+        service = ElasticIpPoolService()
+
+        with self.assertRaises(ValueError):
+            service.update('["proxy-one.example.net:8080"]')
 
     def testUpdateUsesCustomKeyValStoreProxySourceString(self) -> None:
         expectedKeyStr = hashStringValue("custom-key-source")

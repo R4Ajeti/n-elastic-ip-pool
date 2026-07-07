@@ -4,12 +4,12 @@ from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_TEST_TARGET_URL_STR,
     PROXY_TEST_USER_AGENT_STR,
 )
-from core.helper.proxy_address_format_helper import normalizeProxyAddress
+from n_elastic_ip_pool.helper.proxy_address_format_helper import normalizeProxyAddress
 
 
 class ElasticIpHealthCheckProxy:

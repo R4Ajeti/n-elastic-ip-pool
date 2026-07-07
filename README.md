@@ -7,35 +7,47 @@ storage access behind repository or KeyVal abstractions.
 
 ## Quick Start
 
-Run the verbose service to check saved proxies, discover fresh candidates when
-needed, validate them, and inspect the ranked result:
+Run a deterministic local flow with injected fake providers:
 
 ```python
-from core.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
+from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
-verboseElasticIpPoolService = VerboseElasticIpPoolService()
-verboseElasticIpPoolService.run()
 
-print("Final selected proxy:", verboseElasticIpPoolService.finalValueStr)
-print("Ranked proxy list:", verboseElasticIpPoolService.rankedProxyList)
+class FakeProxyScrapeProxy:
+    def fetchProxyCandidateText(self) -> dict:
+        return {
+            "status_code": 200,
+            "proxy_candidate_text": "proxy-one.example.net:8080\n",
+        }
+
+
+class FakeElasticIpHealthCheckProxy:
+    def testProxy(self, proxyStr: str) -> dict:
+        return {
+            "proxy": proxyStr,
+            "isWorking": True,
+            "timingMs": 50,
+            "checkedAt": "2026-01-01T00:00:00Z",
+            "error": None,
+            "statusCode": 200,
+        }
+
+
+service = ElasticIpPoolService(
+    proxyScrapeProxy=FakeProxyScrapeProxy(),
+    elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
+    proxyValidationSuccessCountInt=1,
+    useSavedProxyBool=False,
+)
+
+proxyStr = service.get()
+
+print(proxyStr)
+print(service.rankedProxyList)
 ```
 
-From this repository, the same flow is available through the example runner:
-
-```bash
-LOGGER=INFO python3 testKeyValueProxy.py
-```
-
-The runner also accepts optional parameters for more customizable discovery:
-
-```bash
-python3 testKeyValueProxy.py --release-channel beta --count 3 --selection-mode random --shuffle-candidates --random-seed 42
-python3 testKeyValueProxy.py --release-channel stable --country US --proxy-type http --count 1
-python3 testKeyValueProxy.py --release-channel canary --candidate-limit 500 --no-cache --no-save
-```
-
-Use `LOGGER=DEBUG` when you want to inspect ProxyScrape URLs, candidate rows,
-validation attempts, KeyVal read and write URLs, and the final ranking.
+This example does not call the internet and does not write to public KeyVal
+storage.
 
 ## Installation
 
@@ -75,11 +87,12 @@ restriction bypass behavior.
 - `get()` returns a usable proxy string or `None`.
 - `check()` reads saved proxy values from KeyVal and revalidates them before
   use.
-- `search()` fetches proxy candidates from ProxyScrape, validates candidates,
-  ranks working proxies, and saves a compact reusable list.
+- `search()` fetches proxy candidates, validates candidates, and ranks working
+  proxies.
 - `update(valueStr)` stores an explicit proxy value/list in KeyVal.
 - Candidate proxy rows are normalized and deduplicated before validation.
-- Working proxies must pass multiple validation checks before they are saved.
+- Working proxies must pass multiple validation checks before they are returned
+  or optionally saved.
 - Working proxies are ranked by average response timing, fastest first.
 - KeyVal keys are hashed before storage.
 - The verbose service exposes `finalValueStr` and `rankedProxyList` for manual
@@ -90,7 +103,7 @@ restriction bypass behavior.
 ## Basic Usage
 
 ```python
-from core.service.elastic_ip_pool_service import ElasticIpPoolService
+from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
 service = ElasticIpPoolService()
 
@@ -99,14 +112,15 @@ print(proxyStr)
 ```
 
 `get()` first tries cached KeyVal state through `check()`. If no saved proxy is
-usable, it calls `search()` to discover and validate fresh candidates.
+usable, it calls `search()` to discover and validate fresh candidates. KeyVal
+writes are disabled by default.
 
 ## Public API
 
 Return the best currently available proxy:
 
 ```python
-from core.service.elastic_ip_pool_service import ElasticIpPoolService
+from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
 service = ElasticIpPoolService()
 
@@ -128,6 +142,7 @@ freshProxyStr = service.search()
 Store an explicit proxy list value:
 
 ```python
+service = ElasticIpPoolService(keyValStoreProxyStr="my-local-demo-key-source")
 service.update('["proxy-one.example.net:8080","proxy-two.example.net:8080"]')
 ```
 
@@ -157,7 +172,7 @@ get()
         +-- require repeated successful validation
         +-- reject slow or failing proxies
         +-- rank working proxies by average timing
-        +-- save a compact proxy list to KeyVal
+        +-- optionally save a compact proxy list to KeyVal
 ```
 
 By default, a proxy must pass three successful checks and stay within the
@@ -174,8 +189,9 @@ The current provider abstractions are:
 - `core/proxy/key_val_store_proxy.py` reads and writes saved proxy state through
   KeyVal.
 
-External web calls are implemented only in `core/proxy/`. Services call those
-proxy classes instead of calling provider URLs directly.
+External web calls are implemented only in `core/proxy/` and are packaged under
+`n_elastic_ip_pool.proxy`. Services call those proxy classes instead of calling
+provider URLs directly.
 
 ## Configuration
 
@@ -183,10 +199,10 @@ Runtime configuration can be passed through constructors when you need custom
 providers, targets, timeouts, or validation thresholds:
 
 ```python
-from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
-from core.proxy.key_val_store_proxy import KeyValStoreProxy
-from core.proxy.proxy_scrape_proxy import ProxyScrapeProxy
-from core.service.elastic_ip_pool_service import ElasticIpPoolService
+from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
+from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
+from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
 service = ElasticIpPoolService(
     keyValStoreProxy=KeyValStoreProxy(baseUrlStr="https://api.keyval.org"),
@@ -196,6 +212,7 @@ service = ElasticIpPoolService(
     ),
     proxyValidationSuccessCountInt=3,
     proxyMaxTimingMillisecondInt=2000,
+    saveWorkingProxyBool=False,
 )
 ```
 
@@ -203,16 +220,43 @@ The verbose runner uses these environment variables:
 
 ```bash
 export LOGGER=INFO
-export keyValStoreProxyStr="n-elastic-ip-pool-dummy-proxy-value"
+export keyValStoreProxyStr="my-local-demo-key-source"
 ```
 
 `keyValStoreProxyStr` is a namespace/source string that is hashed before use as
 the KeyVal storage key. Do not put secrets in public KeyVal values.
 
+## Live Provider Demo
+
+From a repository checkout, the live provider flow is available through the
+manual runner:
+
+```bash
+LOGGER=INFO python3 script/key_value_proxy_runner.py --no-save
+```
+
+The runner uses ProxyScrape, a health-check URL, and KeyVal cache reads. Saving
+working proxies to public KeyVal storage is opt-in:
+
+```bash
+python3 script/key_value_proxy_runner.py --save --key-source "my-local-demo-key-source"
+```
+
+Additional examples:
+
+```bash
+python3 script/key_value_proxy_runner.py --release-channel beta --count 3 --selection-mode random --shuffle-candidates --random-seed 42 --no-save
+python3 script/key_value_proxy_runner.py --release-channel stable --country US --proxy-type http --count 1 --no-save
+python3 script/key_value_proxy_runner.py --release-channel canary --candidate-limit 500 --no-cache --no-save
+```
+
+Live runs are network-dependent and can fail because of provider availability,
+provider limits, target availability, or candidate proxy quality.
+
 ## Runner Options
 
-`testKeyValueProxy.py` can be run with optional parameters when you want to make
-candidate discovery and randomness more customizable:
+`script/key_value_proxy_runner.py` can be run with optional parameters when you
+want to make candidate discovery and randomness more customizable:
 
 | Option | Values | Default |
 | --- | --- | --- |
@@ -225,7 +269,7 @@ candidate discovery and randomness more customizable:
 | `--validation-count` | integer | channel default |
 | `--max-timing-ms` | integer milliseconds | channel default |
 | `--cache` / `--no-cache` | boolean flag | enabled |
-| `--save` / `--no-save` | boolean flag | enabled |
+| `--save` / `--no-save` | boolean flag | disabled |
 | `--country` | `all`, `US`, or another ProxyScrape country filter | `all` |
 | `--proxy-type` | `all`, `http`, `socks4`, `socks5` | `all` |
 | `--ssl` | `yes`, `no`, or provider-supported value | `yes` |
@@ -262,19 +306,22 @@ https://api.keyval.org
 Saved proxy values are intentionally compact because public KeyVal path writes
 have small value limits. The service saves reusable proxy strings, not full
 ranking metadata, and caps saved values before they exceed the configured
-length.
+length. Public writes are disabled by default. Writes require an explicit
+`keyValStoreProxyStr` or injected `keyValStoreProxy`; automatic search saves
+also require `saveWorkingProxyBool=True`.
 
 ## Logging
 
 The verbose service supports two log levels:
 
 ```bash
-LOGGER=INFO python3 testKeyValueProxy.py
-LOGGER=DEBUG python3 testKeyValueProxy.py
+LOGGER=INFO python3 script/key_value_proxy_runner.py --no-save
+LOGGER=DEBUG python3 script/key_value_proxy_runner.py --no-save
 ```
 
-`LOGGER=INFO` prints a compact discovery summary. `LOGGER=DEBUG` adds provider
-URLs, candidate rows, validation results, cache URLs, and workflow details.
+`LOGGER=INFO` prints a compact discovery summary with proxy values redacted.
+`LOGGER=DEBUG` adds provider URLs, candidate rows, validation results, cache URL
+shapes, and workflow details while redacting proxy values and KeyVal paths.
 
 ## Architecture
 

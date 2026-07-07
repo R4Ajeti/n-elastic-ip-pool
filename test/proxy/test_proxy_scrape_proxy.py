@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from core.proxy.proxy_scrape_proxy import ProxyScrapeProxy
+from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
 
 
 class FakeHttpResponse:
@@ -51,7 +51,7 @@ class ProxyScrapeProxyTest(unittest.TestCase):
 
     def testFetchProxyCandidateTextReturnsNormalizedData(self) -> None:
         with patch(
-            "core.proxy.proxy_scrape_proxy.urlopen",
+            "n_elastic_ip_pool.proxy.proxy_scrape_proxy.urlopen",
             return_value=FakeHttpResponse("proxy-one.example.net:8080\n", 200),
         ) as urlopenMock:
             resultDict = ProxyScrapeProxy(timeoutSecondInt=4).fetchProxyCandidateText()

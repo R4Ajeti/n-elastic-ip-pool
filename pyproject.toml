@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "n-elastic-ip-pool"
-version = "1.0.0"
+version = "0.1.0"
 description = "Low-level Python service for managing an Elastic IP / IP pool with clean N-layer architecture."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,7 +26,6 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
 ]
 dependencies = []
 
@@ -40,8 +39,23 @@ Homepage = "https://github.com/R4Ajeti/n-elastic-ip-pool"
 Repository = "https://github.com/R4Ajeti/n-elastic-ip-pool"
 Issues = "https://github.com/R4Ajeti/n-elastic-ip-pool/issues"
 
-[tool.setuptools.packages.find]
-include = ["core", "core.*"]
+[tool.setuptools]
+packages = [
+    "n_elastic_ip_pool",
+    "n_elastic_ip_pool.constant",
+    "n_elastic_ip_pool.helper",
+    "n_elastic_ip_pool.proxy",
+    "n_elastic_ip_pool.repo",
+    "n_elastic_ip_pool.service",
+]
+
+[tool.setuptools.package-dir]
+"n_elastic_ip_pool" = "n_elastic_ip_pool"
+"n_elastic_ip_pool.constant" = "core/constant"
+"n_elastic_ip_pool.helper" = "core/helper"
+"n_elastic_ip_pool.proxy" = "core/proxy"
+"n_elastic_ip_pool.repo" = "core/repo"
+"n_elastic_ip_pool.service" = "core/service"
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

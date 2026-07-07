@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from core.constant.elastic_ip_pool_constant import KEY_VAL_STORE_PROXY_ENV_NAME_STR
-from core.helper.env_value_helper import getEnvValue
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import KEY_VAL_STORE_PROXY_ENV_NAME_STR
+from n_elastic_ip_pool.helper.env_value_helper import getEnvValue
 
 
 class EnvValueHelperTest(unittest.TestCase):

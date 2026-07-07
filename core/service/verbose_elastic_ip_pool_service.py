@@ -1,6 +1,6 @@
 import time
 
-from core.constant.elastic_ip_pool_constant import (
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_LOGGER_LEVEL_STR,
     DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
     DEFAULT_PROXY_RELEASE_CHANNEL_STR,
@@ -17,11 +17,15 @@ from core.constant.elastic_ip_pool_constant import (
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
-from core.helper.env_value_helper import getEnvValue
-from core.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
-from core.proxy.key_val_store_proxy import KeyValStoreProxy
-from core.proxy.proxy_scrape_proxy import ProxyScrapeProxy
-from core.service.elastic_ip_pool_service import ElasticIpPoolService
+from n_elastic_ip_pool.helper.env_value_helper import getEnvValue
+from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
+    redactNetworkLocationValue,
+    redactUrlPathValue,
+)
+from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
+from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
+from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
 
 
 class VerboseElasticIpPoolService(ElasticIpPoolService):
@@ -76,8 +80,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         keyValKeyHashStr = self.getKeyValProxyKey()
 
         self.logInfo("=== Proxy discovery run ===")
-        self.logDebug("[run] key source:", self.keyValStoreProxyStr)
-        self.logInfo("[run] hashed storage key:", keyValKeyHashStr)
+        self.logDebug("[run] key source:", "[redacted-key-source]")
+        self.logDebug("[run] hashed storage key:", "[redacted-storage-key]")
         self.logInfo("[run] log level:", self.loggerLevelStr)
         self.logInfo(
             "[run] options:",
@@ -91,12 +95,21 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             f"useCache={self.useSavedProxyBool}",
             f"save={self.saveWorkingProxyBool}",
         )
-        self.logInfo("[run] note: KeyVal is public; credentials are never stored")
+        self.logInfo(
+            "[run] note: KeyVal persistence is public and only writes when enabled "
+            "with a custom key source",
+        )
 
         self.finalValueStr = self.get()
 
-        self.logInfo("[run] selected proxy:", self.finalValueStr or "none")
-        self.logDebug("[run] cache read URL:", self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr))
+        self.logInfo(
+            "[run] selected proxy:",
+            self.redactProxyValue(self.finalValueStr) if self.finalValueStr else "none",
+        )
+        self.logDebug(
+            "[run] cache read URL:",
+            self.redactUrlValue(self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr)),
+        )
         self.logInfo("[run] took", self.getElapsedSecondStr(startFloat), "seconds")
 
         return self.finalValueStr
@@ -104,7 +117,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def get(self) -> str | None:
         self.logDebug("[workflow] resolving usable proxy")
         resultStr = super().get()
-        self.logDebug("[workflow] result:", resultStr or "none")
+        self.logDebug(
+            "[workflow] result:",
+            self.redactProxyValue(resultStr) if resultStr else "none",
+        )
         return resultStr
 
     def search(self) -> str | None:
@@ -112,7 +128,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logInfo("[discovery] starting ProxyScrape search")
         try:
             resultStr = super().search()
-            self.logInfo("[discovery] fastest working proxy:", resultStr or "none")
+            self.logInfo(
+                "[discovery] fastest working proxy:",
+                self.redactProxyValue(resultStr) if resultStr else "none",
+            )
             return resultStr
         finally:
             self.logInfo("[discovery] took", self.getElapsedSecondStr(startFloat), "seconds")
@@ -139,17 +158,17 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         for indexInt, proxyStr in enumerate(proxyCandidateList, start=1):
             self.logDebug(
                 f"[candidate] {indexInt}/{len(proxyCandidateList)}:",
-                proxyStr,
+                self.redactProxyValue(proxyStr),
             )
 
         return proxyCandidateList
 
     def testProxy(self, proxyStr: str) -> dict:
-        self.logDebug("[validation] testing proxy:", proxyStr)
+        self.logDebug("[validation] testing proxy:", self.redactProxyValue(proxyStr))
         resultDict = super().testProxy(proxyStr)
         self.logDebug(
             "[validation] result:",
-            f"proxy={resultDict.get('proxy')}",
+            f"proxy={self.redactProxyValue(resultDict.get('proxy'))}",
             f"isWorking={resultDict.get('isWorking')}",
             f"timingMs={resultDict.get('timingMs')}",
             f"error={resultDict.get('error')}",
@@ -187,14 +206,14 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         for indexInt, proxyDict in enumerate(workingProxyList, start=1):
             self.logInfo(
                 f"[cache] selected {indexInt}/{len(workingProxyList)}:",
-                f"proxy={proxyDict.get('proxy')}",
+                f"proxy={self.redactProxyValue(proxyDict.get('proxy'))}",
                 f"averageTimingMs={proxyDict.get('averageTimingMs')}",
                 f"successCount={proxyDict.get('successCount')}",
             )
 
         resultStr = super().saveWorkingProxyList(workingProxyList)
         if resultStr:
-            self.logInfo("[cache] stored proxy list:", resultStr)
+            self.logInfo("[cache] stored proxy list:", self.redactProxyListValue(resultStr))
         else:
             self.logInfo("[cache] stored proxy list: skipped")
 
@@ -204,23 +223,30 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logInfo("[cache] save skipped:", str(error))
 
     def onWorkingProxySaveSkipped(self) -> None:
+        if self.saveWorkingProxyBool and not self.hasWorkingProxySaveTarget():
+            self.logInfo(
+                "[cache] save skipped: custom KeyVal key source or proxy required",
+            )
+            return None
+
         self.logInfo("[cache] save skipped: disabled")
+        return None
 
     def check(self) -> str | None:
         self.logInfo("[cache] checking saved proxy list")
         resultStr = super().check()
-        self.logInfo("[cache] usable saved proxy:", resultStr or "none")
+        self.logInfo(
+            "[cache] usable saved proxy:",
+            self.redactProxyValue(resultStr) if resultStr else "none",
+        )
         return resultStr
 
     def update(self, valueStr: str) -> str:
         keyValKeyStr = self.getKeyValProxyKey()
-        self.logInfo("[cache] saving proxy list:", valueStr)
+        self.logInfo("[cache] saving proxy list:", self.redactProxyListValue(valueStr))
         self.logDebug(
             "[cache] save URL:",
-            self.keyValStoreProxy.buildSetUrl(
-                keyValKeyStr,
-                valueStr,
-            ),
+            self.redactUrlValue(self.keyValStoreProxy.buildSetUrl(keyValKeyStr, valueStr)),
         )
         resultStr = super().update(valueStr)
         self.logInfo("[cache] save complete")
@@ -249,3 +275,12 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             return LOGGER_LEVEL_DEBUG_STR
 
         return LOGGER_LEVEL_INFO_STR
+
+    def redactProxyValue(self, proxyValue) -> str:
+        return redactNetworkLocationValue(proxyValue)
+
+    def redactProxyListValue(self, proxyListValue) -> str:
+        return redactNetworkLocationValue(proxyListValue)
+
+    def redactUrlValue(self, urlValue) -> str:
+        return redactUrlPathValue(urlValue)

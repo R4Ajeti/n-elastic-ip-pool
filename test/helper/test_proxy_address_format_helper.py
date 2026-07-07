@@ -1,6 +1,6 @@
 import unittest
 
-from core.helper.proxy_address_format_helper import (
+from n_elastic_ip_pool.helper.proxy_address_format_helper import (
     isProxyAddressFormatValid,
     normalizeProxyAddress,
 )

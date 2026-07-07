@@ -1,9 +1,9 @@
 import unittest
 from unittest.mock import patch
 
-from core.constant.elastic_ip_pool_constant import LOGGER_LEVEL_ENV_NAME_STR
-from core.helper.string_hash_helper import hashStringValue
-from core.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import LOGGER_LEVEL_ENV_NAME_STR
+from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
+from n_elastic_ip_pool.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
 
 
 class FakeKeyValStoreProxy:
@@ -119,6 +119,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             keyValStoreProxy=keyValStoreProxy,
             elasticIpHealthCheckProxy=FakeWorkingElasticIpHealthCheckProxy(),
             proxyScrapeProxy=FakeProxyScrapeProxy(),
+            saveWorkingProxyBool=True,
         )
 
         with patch("builtins.print") as printMock:
@@ -170,9 +171,10 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertEqual(proxyScrapeProxy.fetchCountInt, 0)
         self.assertEqual(keyValStoreProxy.setValueStr, "")
         self.assertIn(
-            "[cache] usable saved proxy: saved-fast.example.net:8080",
+            "[cache] usable saved proxy: [redacted-network-location]",
             printedTextStr,
         )
+        self.assertNotIn("saved-fast.example.net:8080", printedTextStr)
         self.assertNotIn("[discovery] starting ProxyScrape search", printedTextStr)
 
     def testRunReturnsWorkingProxyWhenCacheSaveFails(self) -> None:
@@ -182,6 +184,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             keyValStoreProxy=keyValStoreProxy,
             elasticIpHealthCheckProxy=FakeWorkingElasticIpHealthCheckProxy(),
             proxyScrapeProxy=FakeProxyScrapeProxy(),
+            saveWorkingProxyBool=True,
         )
 
         with patch("builtins.print") as printMock:
@@ -195,9 +198,10 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertIn("[cache] save skipped:", printedTextStr)
         self.assertIn("Proxy value was not stored in KeyVal.", printedTextStr)
         self.assertIn(
-            "[run] selected proxy: proxy-one.example.net:8080",
+            "[run] selected proxy: [redacted-network-location]",
             printedTextStr,
         )
+        self.assertNotIn("proxy-one.example.net:8080", printedTextStr)
 
     def testRunDebugPrintsDetailedCandidateAndProxyTestLines(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
@@ -217,9 +221,10 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             for call in printMock.call_args_list
         )
         self.assertIn("[proxyscrape] request URL:", printedTextStr)
-        self.assertIn("[candidate] 1/1: proxy-one.example.net:8080", printedTextStr)
-        self.assertIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
+        self.assertIn("[candidate] 1/1: [redacted-network-location]", printedTextStr)
+        self.assertIn("[validation] testing proxy: [redacted-network-location]", printedTextStr)
         self.assertIn("[validation] result:", printedTextStr)
+        self.assertNotIn("proxy-one.example.net:8080", printedTextStr)
 
     def testRunUsesLoggerEnvironmentValue(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
@@ -240,7 +245,8 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             for call in printMock.call_args_list
         )
         self.assertIn("[run] log level: DEBUG", printedTextStr)
-        self.assertIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
+        self.assertIn("[validation] testing proxy: [redacted-network-location]", printedTextStr)
+        self.assertNotIn("proxy-one.example.net:8080", printedTextStr)
 
     def testRunFallsBackToInfoForInvalidLoggerEnvironmentValue(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
