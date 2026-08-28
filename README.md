@@ -38,6 +38,7 @@ service = ElasticIpPoolService(
     elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
     proxyValidationSuccessCountInt=1,
     useSavedProxyBool=False,
+    saveWorkingProxyBool=False,
 )
 
 proxyStr = service.get()
@@ -113,8 +114,8 @@ print(proxyStr)
 ```
 
 `get()` first tries cached KeyVal state through `check()`. If no saved proxy is
-usable, it calls `search()` to discover and validate fresh candidates. KeyVal
-writes are disabled by default.
+usable, it calls `search()` to discover and validate fresh candidates. Working
+proxy lists are saved to KeyVal by default.
 
 ## Public API
 
@@ -273,7 +274,7 @@ want to make candidate discovery and randomness more customizable:
 | `--validation-count` | integer | channel default |
 | `--max-timing-ms` | integer milliseconds | channel default |
 | `--cache` / `--no-cache` | boolean flag | enabled |
-| `--save` / `--no-save` | boolean flag | disabled |
+| `--save` / `--no-save` | boolean flag | enabled |
 | `--country` | `all`, `US`, or another ProxyScrape country filter | `all` |
 | `--proxy-type` | `all`, `http`, `socks4`, `socks5` | `all` |
 | `--ssl` | `yes`, `no`, or provider-supported value | `yes` |
@@ -310,9 +311,9 @@ https://api.keyval.org
 Saved proxy values are intentionally compact because public KeyVal path writes
 have small value limits. The service saves reusable proxy strings, not full
 ranking metadata, and caps saved values before they exceed the configured
-length. Public writes are disabled by default. Writes require an explicit
-`keyValStoreProxyStr` or injected `keyValStoreProxy`; automatic search saves
-also require `saveWorkingProxyBool=True`.
+length. Cache reads and writes are enabled by default. Pass
+`saveWorkingProxyBool=False` (or `--no-save` in a configurable runner) for a
+read-only run. Set `keyValStoreProxyStr` to use a separate cache namespace.
 
 ## Logging
 

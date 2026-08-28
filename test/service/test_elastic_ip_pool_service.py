@@ -405,7 +405,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         self.assertEqual(len(savedList), 1)
         self.assertEqual(savedList[0], "proxy-two.example.net:8080")
 
-    def testSearchDoesNotSaveWorkingProxyListByDefault(self) -> None:
+    def testSearchSavesWorkingProxyListByDefault(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
         service = ElasticIpPoolService(
             elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
@@ -423,8 +423,11 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         resultStr = service.search()
 
         self.assertEqual(resultStr, "proxy-new.example.net:8080")
-        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
-        self.assertEqual(keyValStoreProxy.setValueStr, "")
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 1)
+        self.assertEqual(
+            json.loads(keyValStoreProxy.setValueStr),
+            ["proxy-new.example.net:8080"],
+        )
 
     def testRankWorkingProxyListSortsAverageTimingAscending(self) -> None:
         service = ElasticIpPoolService(
@@ -997,11 +1000,16 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
 
-    def testUpdateRequiresCustomSaveTarget(self) -> None:
-        service = ElasticIpPoolService()
+    def testUpdateRequiresNonEmptySaveTarget(self) -> None:
+        service = ElasticIpPoolService(keyValStoreProxyStr="")
 
         with self.assertRaises(ValueError):
             service.update('["proxy-one.example.net:8080"]')
+
+    def testDefaultKeyValSourceIsAValidSaveTarget(self) -> None:
+        service = ElasticIpPoolService()
+
+        self.assertTrue(service.hasWorkingProxySaveTarget())
 
     def testUpdateUsesCustomKeyValStoreProxySourceString(self) -> None:
         expectedKeyStr = hashStringValue("custom-key-source")

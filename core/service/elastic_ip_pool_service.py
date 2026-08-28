@@ -220,7 +220,7 @@ class ElasticIpPoolService:
 
         if not self.hasWorkingProxySaveTarget():
             raise ValueError(
-                "A custom keyValStoreProxyStr or keyValStoreProxy is required "
+                "A non-empty keyValStoreProxyStr or keyValStoreProxy is required "
                 "before saving to KeyVal.",
             )
 
@@ -504,14 +504,12 @@ class ElasticIpPoolService:
 
     def hasWorkingProxySaveTarget(self) -> bool:
         return (
-            self.hasExplicitKeyValStoreProxySource()
+            self.hasKeyValStoreProxySource()
             or self.hasInjectedKeyValStoreProxyBool
         )
 
-    def hasExplicitKeyValStoreProxySource(self) -> bool:
-        return bool(self.keyValStoreProxyStr) and (
-            self.keyValStoreProxyStr != KEY_VAL_DUMMY_PROXY_KEY_STR
-        )
+    def hasKeyValStoreProxySource(self) -> bool:
+        return bool(self.keyValStoreProxyStr)
 
     def buildSavedProxyValueStr(self, workingProxyList: list[dict]) -> str:
         proxyValueList = []

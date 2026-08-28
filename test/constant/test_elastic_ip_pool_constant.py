@@ -38,6 +38,12 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
             elastic_ip_pool_constant.DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
             bool,
         )
+        self.assertTrue(
+            elastic_ip_pool_constant.DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
+        )
+        self.assertTrue(
+            elastic_ip_pool_constant.DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
+        )
         self.assertIsInstance(elastic_ip_pool_constant.DEFAULT_TIMEOUT_SECOND_INT, int)
         self.assertIsInstance(
             elastic_ip_pool_constant.MAX_ELASTIC_IP_FAILURE_COUNT_INT,

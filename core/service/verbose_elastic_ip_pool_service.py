@@ -259,7 +259,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def onWorkingProxySaveSkipped(self) -> None:
         if self.saveWorkingProxyBool and not self.hasWorkingProxySaveTarget():
             self.logInfo(
-                "[cache] save skipped: custom KeyVal key source or proxy required",
+                "[cache] save skipped: KeyVal key source or proxy required",
             )
             return None
 
