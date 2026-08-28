@@ -42,6 +42,22 @@ class LoggerLevelHelperTest(unittest.TestCase):
 
         self.assertEqual(levelNameStr, "DEBUG")
 
+    def testBlankProcessDebuggingFallsBackToProcessLogger(self) -> None:
+        with tempfile.TemporaryDirectory() as temporaryDirectoryStr:
+            envFilePath = Path(temporaryDirectoryStr) / ".env"
+            envFilePath.write_text(
+                "DEBUGGING=true\nLOGGER=debug\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {"DEBUGGING": " ", "LOGGER": "info"},
+                clear=True,
+            ):
+                levelNameStr = self.getLoggerLevelName(str(envFilePath))
+
+        self.assertEqual(levelNameStr, "INFO")
+
     def testDotEnvValuesUseDebuggingPrecedence(self) -> None:
         with tempfile.TemporaryDirectory() as temporaryDirectoryStr:
             envFilePath = Path(temporaryDirectoryStr) / ".env"
