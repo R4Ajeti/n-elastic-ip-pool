@@ -13,12 +13,12 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
 
 
 class KeyValueProxyAppTest(unittest.TestCase):
-    def testBlankKeyValBaseUrlKeepsPersistenceDisabled(self) -> None:
+    def testBlankKeyValBaseUrlKeepsCacheAndSaveEnabledByDefault(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             service = buildVerboseElasticIpPoolService("missing.env")
 
-        self.assertFalse(service.useSavedProxyBool)
-        self.assertFalse(service.saveWorkingProxyBool)
+        self.assertTrue(service.useSavedProxyBool)
+        self.assertTrue(service.saveWorkingProxyBool)
         self.assertEqual(service.proxyUsageHistoryRepo.databaseTypeStr, "")
 
     def testConfiguredKeyValProviderUsesNamespaceAndBearerToken(self) -> None:

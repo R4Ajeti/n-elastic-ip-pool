@@ -47,8 +47,7 @@ def buildVerboseElasticIpPoolService(
     )
 
     keyValStoreProxy = None
-    keyValPersistenceEnabledBool = bool(keyValBaseUrlStr)
-    if keyValPersistenceEnabledBool:
+    if keyValBaseUrlStr:
         keyValStoreProxy = KeyValStoreProxy(
             baseUrlStr=keyValBaseUrlStr,
             authTokenStr=keyValAuthTokenStr,
@@ -62,8 +61,6 @@ def buildVerboseElasticIpPoolService(
             timeoutMillisecondInt=proxyMaxTimingMillisecondInt,
         ),
         proxyMaxTimingMillisecondInt=proxyMaxTimingMillisecondInt,
-        useSavedProxyBool=keyValPersistenceEnabledBool,
-        saveWorkingProxyBool=keyValPersistenceEnabledBool,
     )
 
 

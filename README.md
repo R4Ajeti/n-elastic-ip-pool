@@ -257,8 +257,9 @@ DEBUGGING=true LOGGER=info python3 app/key_value_proxy_app.py
 ```
 
 The app uses ProxyScrape and the configured health-check URL. KeyVal cache reads
-and writes are enabled only when `KEY_VAL_BASE_URL` is nonblank. Set
-`keyValStoreProxyStr` in `.env` to use a separate cache namespace.
+and writes are enabled by default. When `KEY_VAL_BASE_URL` is blank, the default
+KeyVal endpoint is used. Set `keyValStoreProxyStr` in `.env` to use a separate
+cache namespace.
 
 Live runs are network-dependent and can fail because of provider availability,
 provider limits, target availability, or candidate proxy quality.
@@ -274,9 +275,10 @@ KEY_VAL_BASE_URL=https://api.keyval.org
 Saved proxy values are intentionally compact because public KeyVal path writes
 have small value limits. The service saves reusable proxy strings, not full
 ranking metadata, and caps saved values before they exceed the configured
-length. The app leaves external cache persistence disabled when
-`KEY_VAL_BASE_URL` is blank. Pass `saveWorkingProxyBool=False` for a read-only
-service instance. Set `keyValStoreProxyStr` to use a separate cache namespace.
+length. The app uses the default KeyVal endpoint when `KEY_VAL_BASE_URL` is
+blank. Pass `useSavedProxyBool=False` to skip cache reads or
+`saveWorkingProxyBool=False` for a read-only service instance. Set
+`keyValStoreProxyStr` to use a separate cache namespace.
 
 ## Logging
 
