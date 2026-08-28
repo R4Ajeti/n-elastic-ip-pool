@@ -224,9 +224,14 @@ service = ElasticIpPoolService(
 The verbose runner uses these environment variables:
 
 ```bash
+export DEBUGGING=true
 export LOGGER=INFO
 export keyValStoreProxyStr="my-local-demo-key-source"
 ```
+
+`DEBUGGING=true` selects `DEBUG`, while `DEBUGGING=false` selects `INFO`.
+When both logging variables are nonblank, `DEBUGGING` takes precedence over
+`LOGGER`. If `DEBUGGING` is unset or blank, `LOGGER` controls the level.
 
 `keyValStoreProxyStr` is a namespace/source string that is hashed before use as
 the KeyVal storage key. Do not put secrets in public KeyVal values.
@@ -234,26 +239,14 @@ the KeyVal storage key. Do not put secrets in public KeyVal values.
 ## Live Provider Demo
 
 From a repository checkout, the live provider flow is available through the
-manual runner:
+app entry point:
 
 ```bash
-LOGGER=INFO python3 script/key_value_proxy_runner.py --no-save
+DEBUGGING=true LOGGER=info python3 app/key_value_proxy_app.py
 ```
 
-The runner uses ProxyScrape, a health-check URL, and KeyVal cache reads. Saving
-working proxies to public KeyVal storage is opt-in:
-
-```bash
-python3 script/key_value_proxy_runner.py --save --key-source "my-local-demo-key-source"
-```
-
-Additional examples:
-
-```bash
-python3 script/key_value_proxy_runner.py --release-channel beta --count 3 --selection-mode random --shuffle-candidates --random-seed 42 --no-save
-python3 script/key_value_proxy_runner.py --release-channel stable --country US --proxy-type http --count 1 --no-save
-python3 script/key_value_proxy_runner.py --release-channel canary --candidate-limit 500 --no-cache --no-save
-```
+The app uses ProxyScrape, a health-check URL, and KeyVal cache reads and writes.
+Set `keyValStoreProxyStr` in `.env` to use a separate cache namespace.
 
 Live runs are network-dependent and can fail because of provider availability,
 provider limits, target availability, or candidate proxy quality.
@@ -285,7 +278,7 @@ want to make candidate discovery and randomness more customizable:
 | `--provider-timeout-second` | network timeout for ProxyScrape and KeyVal | `10` |
 | `--keyval-base-url` | KeyVal-compatible base URL | `https://api.keyval.org` |
 | `--key-source` | string hashed into the KeyVal storage key | env/default key source |
-| `--log-level` | `INFO`, `DEBUG` | `LOGGER` env or `INFO` |
+| `--log-level` | `INFO`, `DEBUG` | `DEBUGGING`, then `LOGGER`, then `INFO` |
 
 Release channels are presets:
 
@@ -312,21 +305,24 @@ Saved proxy values are intentionally compact because public KeyVal path writes
 have small value limits. The service saves reusable proxy strings, not full
 ranking metadata, and caps saved values before they exceed the configured
 length. Cache reads and writes are enabled by default. Pass
-`saveWorkingProxyBool=False` (or `--no-save` in a configurable runner) for a
-read-only run. Set `keyValStoreProxyStr` to use a separate cache namespace.
+`saveWorkingProxyBool=False` for a read-only service instance. Set
+`keyValStoreProxyStr` to use a separate cache namespace.
 
 ## Logging
 
 The verbose service supports two log levels:
 
 ```bash
-LOGGER=INFO python3 script/key_value_proxy_runner.py --no-save
-LOGGER=DEBUG python3 script/key_value_proxy_runner.py --no-save
+DEBUGGING=false python3 app/key_value_proxy_app.py
+DEBUGGING=true python3 app/key_value_proxy_app.py
+LOGGER=INFO python3 app/key_value_proxy_app.py
+LOGGER=DEBUG python3 app/key_value_proxy_app.py
 ```
 
-`LOGGER=INFO` prints a compact discovery summary with proxy values redacted.
-`LOGGER=DEBUG` adds provider URLs, candidate rows, validation results, cache URL
-shapes, and workflow details while redacting proxy values and KeyVal paths.
+`DEBUGGING=false` or `LOGGER=INFO` prints a compact discovery summary with
+proxy values redacted. `DEBUGGING=true` or `LOGGER=DEBUG` adds provider URLs,
+candidate rows, validation results, cache URL shapes, and workflow details
+while redacting proxy values and KeyVal paths.
 
 ## Architecture
 

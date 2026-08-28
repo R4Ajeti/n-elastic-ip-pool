@@ -1,7 +1,10 @@
 import unittest
 from unittest.mock import patch
 
-from n_elastic_ip_pool.constant.elastic_ip_pool_constant import LOGGER_LEVEL_ENV_NAME_STR
+from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
+    DEBUGGING_ENV_NAME_STR,
+    LOGGER_LEVEL_ENV_NAME_STR,
+)
 from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 from n_elastic_ip_pool.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
 
@@ -263,10 +266,16 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertIn("[validation] testing proxy: [redacted-network-location]", printedTextStr)
         self.assertNotIn("proxy-one.example.net:8080", printedTextStr)
 
-    def testRunFallsBackToInfoForInvalidLoggerEnvironmentValue(self) -> None:
+    def testDebuggingEnvironmentValueOverridesLoggerEnvironmentValue(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
 
-        with patch.dict("os.environ", {LOGGER_LEVEL_ENV_NAME_STR: "trace"}):
+        with patch.dict(
+            "os.environ",
+            {
+                DEBUGGING_ENV_NAME_STR: "true",
+                LOGGER_LEVEL_ENV_NAME_STR: "info",
+            },
+        ):
             service = VerboseElasticIpPoolService(
                 keyValStoreProxyStr="custom-key-source",
                 keyValStoreProxy=keyValStoreProxy,
@@ -274,6 +283,20 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
                 proxyScrapeProxy=FakeProxyScrapeProxy(),
                 geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
             )
+
+        self.assertEqual(service.loggerLevelStr, "DEBUG")
+
+    def testRunFallsBackToInfoForInvalidExplicitLoggerLevel(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+
+        service = VerboseElasticIpPoolService(
+            keyValStoreProxyStr="custom-key-source",
+            keyValStoreProxy=keyValStoreProxy,
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
+            loggerLevelStr="trace",
+        )
 
         with patch("builtins.print") as printMock:
             service.run()

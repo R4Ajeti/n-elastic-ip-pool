@@ -9,6 +9,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_PROXY_SELECTION_MODE_STR,
     DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
     DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
+    DEBUGGING_ENV_NAME_STR,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
     LOGGER_LEVEL_DEBUG_STR,
@@ -18,7 +19,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
-from n_elastic_ip_pool.helper.env_value_helper import getEnvValue
+from n_elastic_ip_pool.helper.logger_level_helper import getLoggerLevelNameFromEnv
 from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
     redactNetworkLocationValue,
     redactUrlPathValue,
@@ -80,8 +81,9 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             saveWorkingProxyBool=saveWorkingProxyBool,
             releaseChannelStr=releaseChannelStr,
         )
-        resolvedLoggerLevelStr = loggerLevelStr or getEnvValue(
+        resolvedLoggerLevelStr = loggerLevelStr or getLoggerLevelNameFromEnv(
             LOGGER_LEVEL_ENV_NAME_STR,
+            DEBUGGING_ENV_NAME_STR,
             DEFAULT_LOGGER_LEVEL_STR,
         )
         self.loggerLevelStr = self.normalizeLoggerLevel(resolvedLoggerLevelStr)
@@ -108,8 +110,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             f"save={self.saveWorkingProxyBool}",
         )
         self.logInfo(
-            "[run] note: KeyVal persistence is public and only writes when enabled "
-            "with a custom key source",
+            "[run] note: KeyVal persistence is public; configure a custom key "
+            "source for a separate cache namespace",
         )
 
         self.finalValueStr = self.get()

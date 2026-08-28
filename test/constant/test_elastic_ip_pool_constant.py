@@ -7,6 +7,8 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
     def testConstantValueTypes(self) -> None:
         self.assertIsInstance(elastic_ip_pool_constant.CORE_LOGGER_NAME_STR, str)
         self.assertIsInstance(elastic_ip_pool_constant.LOGGER_LEVEL_ENV_NAME_STR, str)
+        self.assertIsInstance(elastic_ip_pool_constant.DEBUGGING_ENV_NAME_STR, str)
+        self.assertEqual(elastic_ip_pool_constant.DEBUGGING_ENV_NAME_STR, "DEBUGGING")
         self.assertIsInstance(elastic_ip_pool_constant.DEFAULT_LOGGER_LEVEL_STR, str)
         self.assertIsInstance(elastic_ip_pool_constant.LOGGER_LEVEL_INFO_STR, str)
         self.assertIsInstance(elastic_ip_pool_constant.LOGGER_LEVEL_DEBUG_STR, str)
