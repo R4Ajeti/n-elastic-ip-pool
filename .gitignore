@@ -1,6 +1,6 @@
 # ==============================================================================
-# n_elastic_ip_pool .gitignore
-# Python + Codex + proxy/IP pool project
+# n_user_agent_pool .gitignore
+# Python + Codex + Chrome user-agent pool project
 # ==============================================================================
 
 
@@ -68,7 +68,7 @@ id_ed25519*
 
 
 # ------------------------------------------------------------------------------
-# Proxy / IP pool sensitive runtime data
+# User-agent pool sensitive runtime data
 # ------------------------------------------------------------------------------
 proxy.txt
 proxy_list.txt
@@ -277,7 +277,5 @@ terraform.tfstate.*
 !AGENTS.md
 !skill/
 !skill/**/SKILL.md
-commands.txt
 key-val-load-test-log.txt
-.gitignore
 key-val-load-test-result.json

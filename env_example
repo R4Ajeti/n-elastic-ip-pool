@@ -1,0 +1,3 @@
+ENVIRONMENT_PATH= # Path to the local environment configuration.
+DEBUGGING= # Set to true for DEBUG logging or false for INFO logging.
+LOGGER= # Set to DEBUG or INFO when DEBUGGING is unset or blank.
