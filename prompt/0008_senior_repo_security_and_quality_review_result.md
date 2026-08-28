@@ -19,7 +19,7 @@ The largest concerns are:
 - A committed `activate` script can print `.env` values to the terminal.
 - The default service behavior can write to a public third-party KeyVal service.
 - The package installs as a generic `core` package instead of a namespaced package.
-- The project declares version `1.0.0` while still containing placeholder methods and skipped tests.
+- The project declares version `1.0.1` while still containing placeholder methods and skipped tests.
 - Several examples and tests contain real-looking public IPv4 proxy values.
 - The README presents a runnable external-provider workflow as the primary quick start, which is risky for public adoption.
 
@@ -178,7 +178,7 @@ from n_elastic_ip_pool.service import ElasticIpPoolService
 
 - Update tests, README, raw examples, and package metadata.
 
-### Finding Q2: Version Claims `1.0.0` But Code Is Still Alpha
+### Finding Q2: Version Claims `1.0.1` But Code Is Still Alpha
 
 Severity: High
 
@@ -192,7 +192,7 @@ Files:
 
 Evidence:
 
-- `pyproject.toml` has `version = "1.0.0"`.
+- `pyproject.toml` has `version = "1.0.1"`.
 - Classifier says `Development Status :: 3 - Alpha`.
 - `ElasticIpPoolRepo` methods raise `NotImplementedError`.
 - `isIpAddressFormatValid()` raises `NotImplementedError`.
@@ -221,7 +221,7 @@ Files:
 Evidence:
 
 - These are ignored, not tracked.
-- `n_elastic_ip_pool.egg-info/PKG-INFO` shows stale metadata with `Version: 0.1.0` while `pyproject.toml` says `1.0.0`.
+- `n_elastic_ip_pool.egg-info/PKG-INFO` shows stale metadata with `Version: 0.1.0` while `pyproject.toml` says `1.0.1`.
 
 Risk:
 
@@ -377,7 +377,7 @@ Priority improvements:
 - Make KeyVal writes opt-in.
 - Replace real-looking IP:port examples with documentation-safe values.
 - Rename package namespace from `core` to `n_elastic_ip_pool`.
-- Lower version from `1.0.0` to a realistic `0.x` until placeholders are gone.
+- Lower version from `1.0.1` to a realistic `0.x` until placeholders are gone.
 
 ### P1: Before A Serious Alpha Release
 
