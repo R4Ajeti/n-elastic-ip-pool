@@ -23,9 +23,11 @@ class KeyValStoreProxy:
         self,
         baseUrlStr: str = KEY_VAL_API_BASE_URL_STR,
         timeoutSecondInt: int = DEFAULT_TIMEOUT_SECOND_INT,
+        authTokenStr: str = "",
     ) -> None:
         self.baseUrlStr = baseUrlStr.rstrip("/")
         self.timeoutSecondInt = timeoutSecondInt
+        self.authTokenStr = str(authTokenStr or "").strip()
 
     def getValue(self, keyStr: str) -> dict:
         """Read a value from KeyVal and return normalized internal data."""
@@ -92,13 +94,17 @@ class KeyValStoreProxy:
         return f"{self.baseUrlStr}/set/{encodedKeyStr}/{encodedValueStr}"
 
     def _sendGetRequest(self, urlStr: str) -> tuple[str, int]:
+        headerDict = {
+            "Accept": "application/json, text/plain",
+            "User-Agent": KEY_VAL_USER_AGENT_STR,
+        }
+        if self.authTokenStr:
+            headerDict["Authorization"] = f"Bearer {self.authTokenStr}"
+
         request = Request(
             urlStr,
             method="GET",
-            headers={
-                "Accept": "application/json, text/plain",
-                "User-Agent": KEY_VAL_USER_AGENT_STR,
-            },
+            headers=headerDict,
         )
 
         try:

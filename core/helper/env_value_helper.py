@@ -18,6 +18,18 @@ def getEnvValue(
     return defaultValueStr
 
 
+def getEnvIntValue(
+    envNameStr: str,
+    defaultValueInt: int,
+    envFilePathStr: str = ".env",
+) -> int:
+    valueStr = getEnvValue(envNameStr, str(defaultValueInt), envFilePathStr)
+    try:
+        return int(valueStr)
+    except (TypeError, ValueError):
+        return defaultValueInt
+
+
 def getDotEnvValue(envFilePathStr: str, envNameStr: str) -> str | None:
     envFilePath = Path(envFilePathStr)
     if not envFilePath.exists() or not envFilePath.is_file():
@@ -33,6 +45,7 @@ def getDotEnvValue(envFilePathStr: str, envNameStr: str) -> str | None:
 
         keyStr, separatorStr, valueStr = cleanedLineStr.partition("=")
         if separatorStr and keyStr.strip() == envNameStr:
-            return valueStr.strip().strip("'\"")
+            valueWithoutCommentStr = valueStr.partition(" #")[0]
+            return valueWithoutCommentStr.strip().strip("'\"")
 
     return None

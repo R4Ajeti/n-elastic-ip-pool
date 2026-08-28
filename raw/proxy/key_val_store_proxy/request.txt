@@ -5,6 +5,7 @@ HTTP method: GET
 Required headers:
 - Accept: application/json, text/plain
 - User-Agent: n-elastic-ip-pool/0.1
-Authentication: None. KeyVal REST URL values are public, so never send secrets or real proxy credentials.
+- Authorization: Bearer <KEY_VAL_AUTH_TOKEN> (private compatible providers only)
+Authentication: Optional. The public KeyVal provider needs no token. Never include a real token, secret, or proxy credential in examples.
 
 This request documents the KeyValStoreProxy calls used by the service layer. The service hashes the configured KeyVal key and stores a compact JSON list of safe working proxy values. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.

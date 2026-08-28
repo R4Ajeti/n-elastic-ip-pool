@@ -47,6 +47,22 @@ class ElasticIpPoolConstantTest(unittest.TestCase):
             elastic_ip_pool_constant.DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
         )
         self.assertIsInstance(elastic_ip_pool_constant.DEFAULT_TIMEOUT_SECOND_INT, int)
+        self.assertEqual(
+            elastic_ip_pool_constant.KEY_VAL_BASE_URL_ENV_NAME_STR,
+            "KEY_VAL_BASE_URL",
+        )
+        self.assertEqual(
+            elastic_ip_pool_constant.KEY_VAL_AUTH_TOKEN_ENV_NAME_STR,
+            "KEY_VAL_AUTH_TOKEN",
+        )
+        self.assertEqual(
+            elastic_ip_pool_constant.PROXY_TEST_TARGET_URL_ENV_NAME_STR,
+            "PROXY_TEST_TARGET_URL",
+        )
+        self.assertEqual(
+            elastic_ip_pool_constant.PROXY_MAX_TIMING_MILLISECOND_ENV_NAME_STR,
+            "PROXY_MAX_TIMING_MILLISECOND",
+        )
         self.assertIsInstance(
             elastic_ip_pool_constant.MAX_ELASTIC_IP_FAILURE_COUNT_INT,
             int,

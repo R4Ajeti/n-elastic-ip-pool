@@ -221,12 +221,16 @@ service = ElasticIpPoolService(
 )
 ```
 
-The verbose runner uses these environment variables:
+The app supports these environment variables:
 
 ```bash
 export DEBUGGING=true
 export LOGGER=INFO
 export keyValStoreProxyStr="my-local-demo-key-source"
+export KEY_VAL_BASE_URL="https://api.keyval.org"
+export KEY_VAL_AUTH_TOKEN=""
+export PROXY_TEST_TARGET_URL="https://api.ipify.org?format=json"
+export PROXY_MAX_TIMING_MILLISECOND=2000
 ```
 
 `DEBUGGING=true` selects `DEBUG`, while `DEBUGGING=false` selects `INFO`.
@@ -235,6 +239,13 @@ When both logging variables are nonblank, `DEBUGGING` takes precedence over
 
 `keyValStoreProxyStr` is a namespace/source string that is hashed before use as
 the KeyVal storage key. Do not put secrets in public KeyVal values.
+
+`KEY_VAL_BASE_URL` enables external KeyVal-compatible cache reads and writes.
+Leave it blank to keep the run local. `KEY_VAL_AUTH_TOKEN` is optional and is
+sent as a bearer token only when a private compatible provider requires it.
+`PROXY_TEST_TARGET_URL` is the endpoint every candidate must reach, and
+`PROXY_MAX_TIMING_MILLISECOND` controls both the health-check timeout and the
+maximum accepted response time.
 
 ## Live Provider Demo
 
@@ -245,68 +256,27 @@ app entry point:
 DEBUGGING=true LOGGER=info python3 app/key_value_proxy_app.py
 ```
 
-The app uses ProxyScrape, a health-check URL, and KeyVal cache reads and writes.
-Set `keyValStoreProxyStr` in `.env` to use a separate cache namespace.
+The app uses ProxyScrape and the configured health-check URL. KeyVal cache reads
+and writes are enabled only when `KEY_VAL_BASE_URL` is nonblank. Set
+`keyValStoreProxyStr` in `.env` to use a separate cache namespace.
 
 Live runs are network-dependent and can fail because of provider availability,
 provider limits, target availability, or candidate proxy quality.
 
-## Runner Options
-
-`script/key_value_proxy_runner.py` can be run with optional parameters when you
-want to make candidate discovery and randomness more customizable:
-
-| Option | Values | Default |
-| --- | --- | --- |
-| `--release-channel` | `stable`, `beta`, `canary` | `stable` |
-| `--count` | integer, `0` means all that fit in KeyVal | channel default |
-| `--selection-mode` | `fastest`, `random` | channel default |
-| `--candidate-limit` | integer, `0` means all candidates | channel default |
-| `--shuffle-candidates` / `--no-shuffle-candidates` | boolean flag | channel default |
-| `--random-seed` | integer | unset |
-| `--validation-count` | integer | channel default |
-| `--max-timing-ms` | integer milliseconds | channel default |
-| `--cache` / `--no-cache` | boolean flag | enabled |
-| `--save` / `--no-save` | boolean flag | enabled |
-| `--country` | `all`, `US`, or another ProxyScrape country filter | `all` |
-| `--proxy-type` | `all`, `http`, `socks4`, `socks5` | `all` |
-| `--ssl` | `yes`, `no`, or provider-supported value | `yes` |
-| `--anonymity` | `elite`, `anonymous`, `transparent`, or provider-supported value | `elite` |
-| `--target-url` | health-check URL | `https://api.ipify.org?format=json` |
-| `--provider-base-url` | ProxyScrape-compatible base URL | `https://api.proxyscrape.com` |
-| `--provider-timeout-ms` | ProxyScrape query timeout in milliseconds | `300` |
-| `--provider-timeout-second` | network timeout for ProxyScrape and KeyVal | `10` |
-| `--keyval-base-url` | KeyVal-compatible base URL | `https://api.keyval.org` |
-| `--key-source` | string hashed into the KeyVal storage key | env/default key source |
-| `--log-level` | `INFO`, `DEBUG` | `DEBUGGING`, then `LOGGER`, then `INFO` |
-
-Release channels are presets:
-
-- `stable`: strict, predictable defaults. Uses fastest selection, no candidate
-  shuffle, three validation passes, and a 2000 ms max health-check timing.
-- `beta`: more exploratory. Keeps up to 3 proxies, shuffles candidates, uses
-  random selection, validates 3 passes, and allows up to 2500 ms.
-- `canary`: most exploratory. Keeps up to 5 proxies, shuffles candidates, uses
-  random selection, validates 2 passes, limits candidates to 500, and allows up
-  to 3500 ms.
-
-CLI values override the release-channel preset. For repeatable random runs, pass
-`--random-seed` with `--selection-mode random` or `--shuffle-candidates`.
-
 ## KeyVal Persistence
 
-By default, KeyVal storage uses:
+To enable the public KeyVal provider, configure:
 
 ```text
-https://api.keyval.org
+KEY_VAL_BASE_URL=https://api.keyval.org
 ```
 
 Saved proxy values are intentionally compact because public KeyVal path writes
 have small value limits. The service saves reusable proxy strings, not full
 ranking metadata, and caps saved values before they exceed the configured
-length. Cache reads and writes are enabled by default. Pass
-`saveWorkingProxyBool=False` for a read-only service instance. Set
-`keyValStoreProxyStr` to use a separate cache namespace.
+length. The app leaves external cache persistence disabled when
+`KEY_VAL_BASE_URL` is blank. Pass `saveWorkingProxyBool=False` for a read-only
+service instance. Set `keyValStoreProxyStr` to use a separate cache namespace.
 
 ## Logging
 

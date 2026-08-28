@@ -86,6 +86,30 @@ class KeyValStoreProxyTest(unittest.TestCase):
             },
         )
 
+    def testPrivateProviderAddsBearerAuthorizationHeader(self) -> None:
+        with patch(
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
+            return_value=FakeHttpResponse('{"status":"SUCCESS","val":"stored"}'),
+        ) as urlopenMock:
+            KeyValStoreProxy(
+                baseUrlStr="https://keyval.example.test",
+                authTokenStr="safe-test-token",
+            ).getValue("sample-key")
+
+        request = urlopenMock.call_args.args[0]
+        self.assertEqual(request.full_url, "https://keyval.example.test/get/sample-key")
+        self.assertEqual(request.headers["Authorization"], "Bearer safe-test-token")
+
+    def testPublicProviderOmitsAuthorizationHeader(self) -> None:
+        with patch(
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
+            return_value=FakeHttpResponse('{"status":"SUCCESS","val":"stored"}'),
+        ) as urlopenMock:
+            KeyValStoreProxy().getValue("sample-key")
+
+        request = urlopenMock.call_args.args[0]
+        self.assertNotIn("Authorization", request.headers)
+
     def testSetValueReturnsNormalizedStoredValue(self) -> None:
         with patch(
             "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",

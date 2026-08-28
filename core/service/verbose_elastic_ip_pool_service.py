@@ -109,10 +109,13 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             f"useCache={self.useSavedProxyBool}",
             f"save={self.saveWorkingProxyBool}",
         )
-        self.logInfo(
-            "[run] note: KeyVal persistence is public; configure a custom key "
-            "source for a separate cache namespace",
-        )
+        if self.useSavedProxyBool or self.saveWorkingProxyBool:
+            self.logInfo(
+                "[run] note: public KeyVal persistence needs a custom key source "
+                "for a separate cache namespace",
+            )
+        else:
+            self.logInfo("[run] external cache persistence: disabled")
 
         self.finalValueStr = self.get()
 
@@ -120,10 +123,11 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             "[run] selected proxy:",
             self.redactProxyValue(self.finalValueStr) if self.finalValueStr else "none",
         )
-        self.logDebug(
-            "[run] cache read URL:",
-            self.redactUrlValue(self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr)),
-        )
+        if self.useSavedProxyBool:
+            self.logDebug(
+                "[run] cache read URL:",
+                self.redactUrlValue(self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr)),
+            )
         self.logInfo("[run] took", self.getElapsedSecondStr(startFloat), "seconds")
 
         return self.finalValueStr

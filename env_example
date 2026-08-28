@@ -1,3 +1,7 @@
 ENVIRONMENT_PATH= # Path to the local environment configuration.
 DEBUGGING= # Set to true for DEBUG logging or false for INFO logging.
 LOGGER= # Set to DEBUG or INFO when DEBUGGING is unset or blank.
+KEY_VAL_BASE_URL= # Optional KeyVal-compatible base URL; leave blank to keep persistence local.
+KEY_VAL_AUTH_TOKEN= # Optional bearer token for a private KeyVal-compatible provider.
+PROXY_TEST_TARGET_URL= # URL every candidate proxy must reach to be considered working.
+PROXY_MAX_TIMING_MILLISECOND= # Maximum accepted proxy response time in milliseconds; defaults to 2000.
