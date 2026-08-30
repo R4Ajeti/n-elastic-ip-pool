@@ -475,7 +475,7 @@ class ElasticIpPoolService:
         return self.getTimingMsInt(testResultDict) <= self.proxyMaxTimingMillisecondInt
 
     def isProxyUsageAllowed(self, proxyStr: str) -> bool:
-        if self.isProxyTranslationLimitReached(self.getProxyTranslationCount(proxyStr)):
+        if self.isProxyTranslationLimitReached(self.readProxyTranslationCountState(proxyStr)["count"]):
             return False
 
         try:
@@ -507,7 +507,11 @@ class ElasticIpPoolService:
         return self.getProxyTranslationCountState(proxyStr)["count"]
 
     def getProxyTranslationCountState(self, proxyStr: str) -> dict:
-        """Read a counter and distinguish stored values from local fallback."""
+        """Get a counter, creating and verifying zero immediately if absent."""
+        return self.ensureProxyTranslationCount(proxyStr)
+
+    def readProxyTranslationCountState(self, proxyStr: str) -> dict:
+        """Observe counter state without writes for eligibility and verification."""
         keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
         localCountInt = self.proxyTranslationCountByKeyDict.get(keyStr, 0)
         if keyStr in self.unsavedProxyTranslationKeySet or not (
@@ -533,7 +537,7 @@ class ElasticIpPoolService:
 
     def ensureProxyTranslationCount(self, proxyStr: str) -> dict:
         """Initialize a confirmed absent/null counter, preserving existing values."""
-        stateDict = self.getProxyTranslationCountState(proxyStr)
+        stateDict = self.readProxyTranslationCountState(proxyStr)
         if stateDict["source"] != "missing" or not (
             self.saveWorkingProxyBool and self.hasWorkingProxySaveTarget()
         ):
@@ -545,7 +549,7 @@ class ElasticIpPoolService:
         """Read a saved counter back; keep local progress if it is not available."""
         keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
         localCountInt = self.proxyTranslationCountByKeyDict.get(keyStr, 0)
-        stateDict = self.getProxyTranslationCountState(proxyStr)
+        stateDict = self.readProxyTranslationCountState(proxyStr)
         if stateDict["source"] in {"missing", "local-fallback"}:
             self.proxyTranslationCountByKeyDict[keyStr] = localCountInt
             self.unsavedProxyTranslationKeySet.add(keyStr)

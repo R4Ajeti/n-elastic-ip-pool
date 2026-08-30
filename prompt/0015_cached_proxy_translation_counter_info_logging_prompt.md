@@ -6,6 +6,14 @@ changes, including the missing-counter and DEBUG-only corrections below.
 The user subsequently authorized fixing null/missing counters: initialize them
 to zero. Implement the missing-counter and DEBUG-only logging corrections below,
 keeping the package version at `1.0.5`. Do not change the external translator.
+Latest clarification: public counter reads must immediately initialize and verify
+a missing/null/empty counter, not wait until a proxy has been selected. Apply
+this to `getProxyTranslationCount` and `getProxyTranslationCountState` as well
+as `ensureProxyTranslationCount`, respecting explicit read-only settings. Keep
+internal candidate eligibility reads observational to avoid initializing unused
+provider candidates. Separate observational reads from initialization to prevent
+recursive write/read-back loops. Merely opening a KeyVal GET URL in a browser
+does not run this package or create the record.
 
 ## Goal
 
@@ -257,3 +265,10 @@ KeyVal missing-status and null responses have matching safe raw examples.
 The requested run configuration and per-proxy detail categories are DEBUG-only.
 Version remains `1.0.5`. Offline verification: 156 tests passed, with 2 existing
 skips. No live database or external translator was modified.
+
+The latest follow-up also makes both public counter getters initialize a
+missing/null/empty value immediately, without requiring selection. Verification
+and candidate filtering use the separate read-only method to prevent recursion
+and avoid unused candidate records. Updated offline verification: 160 tests
+passed, with 2 existing skips; the exact missing-response → SET 0 → GET sequence
+is covered for both public getters. Version remains `1.0.5`.

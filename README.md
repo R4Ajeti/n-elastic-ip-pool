@@ -342,6 +342,14 @@ feedback. The service reads the new record back to verify it. This initializatio
 works independently of logging level and does not overwrite existing numbers.
 Provider errors and malformed values do not trigger initialization. In read-only
 or local-only mode, absent counters remain an effective local zero.
+Direct calls to `getProxyTranslationCount(proxyStr)` and
+`getProxyTranslationCountState(proxyStr)` also initialize a missing/null/empty
+counter immediately: GET the key, SET it to `0`, then GET it again to verify.
+This does not require running discovery or selecting a proxy first. Existing
+numeric values are preserved. Internal candidate eligibility checks use
+`readProxyTranslationCountState(proxyStr)`, which only observes state and does
+not initialize unused candidates. A browser request to the KeyVal GET endpoint
+alone cannot create the key; the updated package must run for that proxy.
 Successful fresh discovery explicitly resets each proxy in the
 returned ranked working list to `0`, starting a new translation cycle even if
 that eligible proxy had a previous positive or negative count. This also applies

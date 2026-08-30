@@ -551,6 +551,54 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                     self.assertEqual(service.getProxyTranslationCountState(self.proxyStr)["source"], "keyval")
                 self.assertEqual(writeList, [(keyStr, "0")])
 
+    def testDirectCounterGettersImmediatelyCreateZeroWithoutSelection(self) -> None:
+        for methodStr in ("getProxyTranslationCount", "getProxyTranslationCountState"):
+            for value in (None, "", "null", "   "):
+                with self.subTest(methodStr=methodStr, value=value):
+                    self.store = MemoryKeyValStoreProxy()
+                    service = self.buildService()
+                    keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+                    self.store.valueByKeyDict[keyStr] = value
+                    result = getattr(service, methodStr)(self.proxyStr)
+                    self.assertEqual(result if isinstance(result, int) else result["count"], 0)
+                    self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
+                    self.assertEqual(self.store.writeList, [(keyStr, "0")])
+                    self.assertEqual(service.proxyScrapeProxy.fetchCallCountInt, 0)
+                    self.assertEqual(service.elasticIpHealthCheckProxy.testCallList, [])
+                    getattr(service, methodStr)(self.proxyStr)
+                    self.assertEqual(self.store.writeList, [(keyStr, "0")])
+
+    def testDirectGetterHandlesExactProviderMissingResponseWithImmediateSet(self) -> None:
+        for methodStr in ("getProxyTranslationCount", "getProxyTranslationCountState"):
+            proxy = KeyValStoreProxy(baseUrlStr="https://keyval.example.test")
+            service = self.buildService(keyValStoreProxy=proxy)
+            keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+            with patch.object(proxy, "_sendGetRequest", side_effect=[
+                (json.dumps({"status": "-KEY-DOESNT-EXISTS-", "key": keyStr, "val": ""}), 200),
+                (json.dumps({"status": "SUCCESS", "key": keyStr, "val": "0"}), 200),
+                (json.dumps({"status": "SUCCESS", "key": keyStr, "val": "0"}), 200),
+            ]) as requestMock:
+                result = getattr(service, methodStr)(self.proxyStr)
+            self.assertEqual(result if isinstance(result, int) else result["count"], 0)
+            self.assertEqual([call.args[0] for call in requestMock.call_args_list], [
+                f"https://keyval.example.test/get/{keyStr}",
+                f"https://keyval.example.test/set/{keyStr}/0",
+                f"https://keyval.example.test/get/{keyStr}",
+            ])
+
+    def testCandidateEligibilityDoesNotInitializeUnusedCounters(self) -> None:
+        service = self.buildService()
+        self.assertTrue(service.isProxyUsageAllowed(self.proxyStr))
+        self.assertEqual(self.store.writeList, [])
+
+    def testDirectGetterVerificationFailureDoesNotLoopOrClaimPersistence(self) -> None:
+        service = self.buildService()
+        with patch.object(self.store, "setValue", return_value={"stored": True}) as writeMock:
+            stateDict = service.getProxyTranslationCountState(self.proxyStr)
+        self.assertEqual(stateDict["source"], "local")
+        self.assertEqual(stateDict["count"], 0)
+        writeMock.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
