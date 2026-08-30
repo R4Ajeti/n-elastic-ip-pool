@@ -6,6 +6,13 @@
   "get_value": {
     "key": "a9362079373ac299322a9a8db4d94b5b65c392e1a188d30f5f899fb17ccb4a65"
   },
+  "get_translation_count": {
+    "key": "fb9cb4580a169784884d399c82099d2d6efa7607955df9b51c046a124e9f4666"
+  },
+  "set_translation_count": {
+    "key": "fb9cb4580a169784884d399c82099d2d6efa7607955df9b51c046a124e9f4666",
+    "value": "-5"
+  },
   "set_value": {
     "key": "a9362079373ac299322a9a8db4d94b5b65c392e1a188d30f5f899fb17ccb4a65",
     "value": "[\"proxy-one.example.net:8080\"]"

@@ -54,6 +54,7 @@ def buildVerboseElasticIpPoolService(
         )
 
     return VerboseElasticIpPoolService(
+        envFilePathStr=envFilePathStr,
         keyValStoreProxyStr=keyValStoreProxyStr,
         keyValStoreProxy=keyValStoreProxy,
         elasticIpHealthCheckProxy=ElasticIpHealthCheckProxy(

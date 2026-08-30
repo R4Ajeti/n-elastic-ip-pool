@@ -13,12 +13,14 @@ class FakeKeyValStoreProxy:
     def __init__(self, storedBool: bool = True) -> None:
         self.valueStr = ""
         self.getKeyStr = ""
+        self.getKeyList: list[str] = []
         self.setKeyStr = ""
         self.setValueStr = ""
         self.storedBool = storedBool
 
     def getValue(self, keyStr: str) -> dict:
         self.getKeyStr = keyStr
+        self.getKeyList.append(keyStr)
         return {
             "key": keyStr,
             "exists": bool(self.valueStr),
@@ -157,7 +159,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
 
         self.assertIsNone(resultStr)
         self.assertEqual(keyValStoreProxy.setKeyStr, "")
-        self.assertEqual(keyValStoreProxy.getKeyStr, expectedKeyStr)
+        self.assertEqual(keyValStoreProxy.getKeyList[0], expectedKeyStr)
         self.assertEqual(keyValStoreProxy.setValueStr, "")
         printedTextStr = "\n".join(
             " ".join(str(arg) for arg in call.args)

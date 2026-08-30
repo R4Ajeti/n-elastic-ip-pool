@@ -10,6 +10,12 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_PROXY_SELECTION_MODE_STR,
     DEFAULT_PROXY_SHUFFLE_CANDIDATE_BOOL,
     DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
+    DEFAULT_KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_STR,
+    DEFAULT_PROXY_TRANSLATION_MAX_USE_COUNT_INT,
+    DEFAULT_PROXY_TRANSLATION_MIN_HEALTH_COUNT_INT,
+    KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_ENV_NAME_STR,
+    PROXY_TRANSLATION_MAX_USE_COUNT_ENV_NAME_STR,
+    PROXY_TRANSLATION_MIN_HEALTH_COUNT_ENV_NAME_STR,
     KEY_VAL_MAX_SAVED_PROXY_COUNT_INT,
     KEY_VAL_MAX_VALUE_LENGTH_INT,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
@@ -23,6 +29,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
 from n_elastic_ip_pool.helper.proxy_address_format_helper import normalizeProxyAddress
+from n_elastic_ip_pool.helper.env_value_helper import getEnvIntValue, getEnvValue
 from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
 from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import (
@@ -61,6 +68,10 @@ class ElasticIpPoolService:
         useSavedProxyBool: bool = DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
         saveWorkingProxyBool: bool = DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
         releaseChannelStr: str = DEFAULT_PROXY_RELEASE_CHANNEL_STR,
+        keyValProxyTranslationCountKeyStr: str | None = None,
+        proxyTranslationMaxUseCountInt: int | None = None,
+        proxyTranslationMinHealthCountInt: int | None = None,
+        envFilePathStr: str = ".env",
     ) -> None:
         self.elasticIpPoolRepo = elasticIpPoolRepo or ElasticIpPoolRepo()
         self.proxyUsageHistoryRepo = (
@@ -101,6 +112,39 @@ class ElasticIpPoolService:
         ).lower()
         self.rankedProxyDictList: list[dict] | None = None
         self.rankedProxyList: list[str] | None = None
+        self.keyValProxyTranslationCountKeyStr = str(
+            keyValProxyTranslationCountKeyStr
+            if keyValProxyTranslationCountKeyStr is not None
+            else getEnvValue(
+                KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_ENV_NAME_STR,
+                DEFAULT_KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_STR,
+                envFilePathStr,
+            )
+        ).strip() or DEFAULT_KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_STR
+        self.proxyTranslationMaxUseCountInt = (
+            proxyTranslationMaxUseCountInt
+            if proxyTranslationMaxUseCountInt is not None
+            else getEnvIntValue(
+                PROXY_TRANSLATION_MAX_USE_COUNT_ENV_NAME_STR,
+                DEFAULT_PROXY_TRANSLATION_MAX_USE_COUNT_INT,
+                envFilePathStr,
+            )
+        )
+        self.proxyTranslationMinHealthCountInt = (
+            proxyTranslationMinHealthCountInt
+            if proxyTranslationMinHealthCountInt is not None
+            else getEnvIntValue(
+                PROXY_TRANSLATION_MIN_HEALTH_COUNT_ENV_NAME_STR,
+                DEFAULT_PROXY_TRANSLATION_MIN_HEALTH_COUNT_INT,
+                envFilePathStr,
+            )
+        )
+        if self.proxyTranslationMaxUseCountInt <= 0:
+            self.proxyTranslationMaxUseCountInt = DEFAULT_PROXY_TRANSLATION_MAX_USE_COUNT_INT
+        if self.proxyTranslationMinHealthCountInt >= 0:
+            self.proxyTranslationMinHealthCountInt = DEFAULT_PROXY_TRANSLATION_MIN_HEALTH_COUNT_INT
+        self.proxyTranslationCountByKeyDict: dict[str, int] = {}
+        self.unsavedProxyTranslationKeySet: set[str] = set()
 
     def get(self) -> str | None:
         if self.useSavedProxyBool:
@@ -421,6 +465,9 @@ class ElasticIpPoolService:
         return self.getTimingMsInt(testResultDict) <= self.proxyMaxTimingMillisecondInt
 
     def isProxyUsageAllowed(self, proxyStr: str) -> bool:
+        if self.isProxyTranslationLimitReached(self.getProxyTranslationCount(proxyStr)):
+            return False
+
         try:
             if self.proxyUsageHistoryRepo.isProxyDisabled(proxyStr):
                 return False
@@ -435,6 +482,76 @@ class ElasticIpPoolService:
             return False
 
         return True
+
+    def getKeyValProxyTranslationCountKey(self, proxyStr: str) -> str:
+        normalizedProxyStr = normalizeProxyAddress(proxyStr)
+        if not normalizedProxyStr:
+            raise ValueError("A valid proxy address is required for translation feedback.")
+        return hashStringValue(json.dumps([
+            self.keyValProxyTranslationCountKeyStr,
+            self.keyValStoreProxyStr,
+            normalizedProxyStr,
+        ], separators=(",", ":")))
+
+    def getProxyTranslationCount(self, proxyStr: str) -> int:
+        keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
+        localCountInt = self.proxyTranslationCountByKeyDict.get(keyStr, 0)
+        if keyStr in self.unsavedProxyTranslationKeySet or not (
+            self.useSavedProxyBool or self.saveWorkingProxyBool
+        ):
+            return localCountInt
+        try:
+            resultDict = self.keyValStoreProxy.getValue(keyStr)
+            countInt = int(resultDict["value"]) if resultDict.get("exists") else 0
+        except (KeyValStoreProxyError, TypeError, ValueError, KeyError) as error:
+            self.onProxyTranslationCountFailure(error)
+            return localCountInt
+        self.proxyTranslationCountByKeyDict[keyStr] = countInt
+        return countInt
+
+    def isProxyTranslationLimitReached(self, countInt: int) -> bool:
+        return (
+            countInt >= self.proxyTranslationMaxUseCountInt
+            or countInt <= self.proxyTranslationMinHealthCountInt
+        )
+
+    def recordSubtitleTranslationResult(
+        self,
+        proxyStr: str,
+        successBool: bool,
+        proxyFailureBool: bool = False,
+    ) -> str | None:
+        """Report one completed subtitle outcome; return the next proxy to use.
+
+        Call exactly once per subtitle, not per line, health check, or selection.
+        Only explicitly proxy-caused failures decrement the signed counter.
+        KeyVal read/modify/write is intended for a single writer per namespace.
+        """
+        keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
+        if successBool and proxyFailureBool:
+            raise ValueError("A successful translation cannot also be a proxy failure.")
+        if not successBool and not proxyFailureBool:
+            return proxyStr
+        countInt = self.getProxyTranslationCount(proxyStr)
+        # A late result cannot revive a proxy that has already reached a limit.
+        if not self.isProxyTranslationLimitReached(countInt):
+            countInt += 1 if successBool else -1
+        self.proxyTranslationCountByKeyDict[keyStr] = countInt
+        self.unsavedProxyTranslationKeySet.add(keyStr)
+        if self.saveWorkingProxyBool and self.hasWorkingProxySaveTarget():
+            try:
+                resultDict = self.keyValStoreProxy.setValue(keyStr, str(countInt))
+                if not resultDict.get("stored"):
+                    raise KeyValStoreProxyError("Translation count was not stored.")
+                self.unsavedProxyTranslationKeySet.discard(keyStr)
+            except KeyValStoreProxyError as error:
+                self.onProxyTranslationCountFailure(error)
+        if self.isProxyTranslationLimitReached(countInt):
+            return self.search()
+        return proxyStr
+
+    def onProxyTranslationCountFailure(self, error: Exception) -> None:
+        return None
 
     def recordSuccessfulProxyUsage(
         self,

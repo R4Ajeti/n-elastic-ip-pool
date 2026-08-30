@@ -9,3 +9,16 @@ Required headers:
 Authentication: Optional. The public KeyVal provider needs no token. Never include a real token, secret, or proxy credential in examples.
 
 This request documents the KeyValStoreProxy calls used by the service layer. The service hashes the configured KeyVal key and stores a compact JSON list of safe working proxy values. The proxy layer handles the KeyVal endpoint URL, GET request construction, timeout, response parsing, and provider errors.
+
+Subtitle translation counter (same GET methods and headers, no new endpoint):
+- GET https://api.keyval.org/get/{COUNTER_KEY}
+- GET https://api.keyval.org/set/{COUNTER_KEY}/1
+- GET https://api.keyval.org/set/{COUNTER_KEY}/-5
+COUNTER_KEY is the hash of the JSON array [counter namespace, pool namespace, normalized proxy address].
+KEY_VAL_PROXY_TRANSLATION_COUNT_KEY defaults to n-elastic-ip-pool-proxy-translation-count.
+Counter values are signed decimal text, not proxy lists. A missing key starts at zero.
+The service increments after successful subtitle translation and decrements only on a reported proxy-caused failure.
+PROXY_TRANSLATION_MAX_USE_COUNT defaults to 50; PROXY_TRANSLATION_MIN_HEALTH_COUNT defaults to -5.
+Limit evaluation and rediscovery are service responsibilities, not KeyValStoreProxy behavior.
+These examples use the default pool namespace and proxy-one.example.net:8080.
+Read/modify/write is not atomic; use a single writer for each counter namespace/pool.

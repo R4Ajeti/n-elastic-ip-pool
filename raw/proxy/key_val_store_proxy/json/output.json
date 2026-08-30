@@ -5,6 +5,20 @@
     "value": "[\"proxy-one.example.net:8080\"]",
     "status_code": 200
   },
+  "get_translation_count": {
+    "key": "fb9cb4580a169784884d399c82099d2d6efa7607955df9b51c046a124e9f4666",
+    "exists": true,
+    "value": "-4",
+    "status_code": 200
+  },
+  "set_translation_count": {
+    "key": "fb9cb4580a169784884d399c82099d2d6efa7607955df9b51c046a124e9f4666",
+    "stored": true,
+    "value": "-5",
+    "response_value": "-5",
+    "response_status": "SUCCESS",
+    "status_code": 200
+  },
   "set_value": {
     "key": "a9362079373ac299322a9a8db4d94b5b65c392e1a188d30f5f899fb17ccb4a65",
     "stored": true,

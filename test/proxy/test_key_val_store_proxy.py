@@ -1,4 +1,5 @@
 import io
+import json
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
@@ -30,6 +31,28 @@ class FakeHttpResponse:
 
 
 class KeyValStoreProxyTest(unittest.TestCase):
+    def testSignedTranslationCountersRoundTripIncludingZero(self) -> None:
+        for countInt in (0, 1, 50, 999, -5):
+            for responseTextStr in (
+                str(countInt),
+                json.dumps({"status": "SUCCESS", "val": countInt}),
+            ):
+                with self.subTest(countInt=countInt, responseTextStr=responseTextStr), patch(
+                    "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
+                    return_value=FakeHttpResponse(responseTextStr),
+                ) as urlopenMock:
+                    proxy = KeyValStoreProxy()
+                    readDict = proxy.getValue("safe-counter-key")
+                    self.assertTrue(readDict["exists"])
+                    self.assertEqual(readDict["value"], str(countInt))
+                    writeDict = proxy.setValue("safe-counter-key", str(countInt))
+                    self.assertTrue(writeDict["stored"])
+                    self.assertEqual(writeDict["value"], str(countInt))
+                    self.assertEqual(writeDict["response_value"], str(countInt))
+                    self.assertTrue(urlopenMock.call_args.args[0].full_url.endswith(
+                        f"/set/safe-counter-key/{countInt}",
+                    ))
+
     def testGetValueReturnsNormalizedExistingValue(self) -> None:
         with patch(
             "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",

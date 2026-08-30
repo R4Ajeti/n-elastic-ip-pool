@@ -59,6 +59,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         useSavedProxyBool: bool = DEFAULT_PROXY_USE_SAVED_PROXY_BOOL,
         saveWorkingProxyBool: bool = DEFAULT_PROXY_SAVE_WORKING_PROXY_BOOL,
         releaseChannelStr: str = DEFAULT_PROXY_RELEASE_CHANNEL_STR,
+        keyValProxyTranslationCountKeyStr: str | None = None,
+        proxyTranslationMaxUseCountInt: int | None = None,
+        proxyTranslationMinHealthCountInt: int | None = None,
+        envFilePathStr: str = ".env",
     ) -> None:
         self.finalValueStr: str | None = None
         self.rankedProxyList: list[str] | None = None
@@ -81,6 +85,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             useSavedProxyBool=useSavedProxyBool,
             saveWorkingProxyBool=saveWorkingProxyBool,
             releaseChannelStr=releaseChannelStr,
+            keyValProxyTranslationCountKeyStr=keyValProxyTranslationCountKeyStr,
+            proxyTranslationMaxUseCountInt=proxyTranslationMaxUseCountInt,
+            proxyTranslationMinHealthCountInt=proxyTranslationMinHealthCountInt,
+            envFilePathStr=envFilePathStr,
         )
         resolvedLoggerLevelStr = loggerLevelStr or getLoggerLevelNameFromEnv(
             LOGGER_LEVEL_ENV_NAME_STR,
@@ -153,6 +161,20 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             self.redactProxyValue(resultStr) if resultStr else "none",
         )
         return resultStr
+
+    def recordSubtitleTranslationResult(
+        self,
+        proxyStr: str,
+        successBool: bool,
+        proxyFailureBool: bool = False,
+    ) -> str | None:
+        self.finalValueStr = super().recordSubtitleTranslationResult(
+            proxyStr, successBool, proxyFailureBool,
+        )
+        return self.finalValueStr
+
+    def onProxyTranslationCountFailure(self, error: Exception) -> None:
+        self.logDebug("[translation-count] using local state:", error.__class__.__name__)
 
     def search(self) -> str | None:
         startFloat = time.perf_counter()

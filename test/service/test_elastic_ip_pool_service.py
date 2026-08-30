@@ -51,12 +51,14 @@ class FakeKeyValStoreProxy:
         }
         self.storedBool = storedBool
         self.getKeyStr = ""
+        self.getKeyList: list[str] = []
         self.setKeyStr = ""
         self.setValueStr = ""
         self.setValueCallCountInt = 0
 
     def getValue(self, keyStr: str) -> dict:
         self.getKeyStr = keyStr
+        self.getKeyList.append(keyStr)
         return self.getResultDict
 
     def setValue(self, keyStr: str, valueStr: str) -> dict:
@@ -325,7 +327,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         resultStr = service.get()
 
         self.assertEqual(resultStr, "proxy-fast.example.net:8080")
-        self.assertEqual(keyValStoreProxy.getKeyStr, expectedKeyStr)
+        self.assertEqual(keyValStoreProxy.getKeyList[0], expectedKeyStr)
         self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
         self.assertEqual(proxyScrapeProxy.fetchCallCountInt, 0)
 
@@ -976,7 +978,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         resultStr = service.get()
 
         self.assertEqual(resultStr, "proxy-new.example.net:8080")
-        self.assertEqual(keyValStoreProxy.getKeyStr, "")
+        self.assertNotIn(service.getKeyValProxyKey(), keyValStoreProxy.getKeyList)
         self.assertEqual(proxyScrapeProxy.fetchCallCountInt, 1)
 
     def testSearchCanSkipSavingWorkingProxyList(self) -> None:

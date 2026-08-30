@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` (version `1.0.2`) is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.3`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
@@ -286,6 +286,73 @@ length. The app uses the default KeyVal endpoint when `KEY_VAL_BASE_URL` is
 blank. Pass `useSavedProxyBool=False` to skip cache reads or
 `saveWorkingProxyBool=False` for a read-only service instance. Set
 `keyValStoreProxyStr` to use a separate cache namespace.
+
+## Subtitle Translation Feedback
+
+Configure the signed translation counter independently of the existing Firebase
+selection/usage history:
+
+```text
+KEY_VAL_PROXY_TRANSLATION_COUNT_KEY=n-elastic-ip-pool-proxy-translation-count
+PROXY_TRANSLATION_MAX_USE_COUNT=50
+PROXY_TRANSLATION_MIN_HEALTH_COUNT=-5
+```
+
+These settings work for both service classes and the app builder. Explicit
+constructor arguments (`keyValProxyTranslationCountKeyStr`,
+`proxyTranslationMaxUseCountInt`, `proxyTranslationMinHealthCountInt`) override
+the process environment, which overrides `.env` (or `envFilePathStr`). Missing,
+blank, malformed, or wrong-sign environment limits fall back to `50` and `-5`.
+
+The counter is **successful subtitles minus proxy-caused failures**. It is not
+a total-success counter or a consecutive-failure counter. Selection and health
+checks do not change it; existing Firebase selection history and its separate
+`maxProxyUsageCountInt` option remain unchanged for compatibility.
+
+This package does not translate subtitles itself. The calling application must
+report each completed subtitle exactly once, using the proxy that handled it:
+
+```python
+# After a whole subtitle is translated successfully:
+proxyStr = service.recordSubtitleTranslationResult(proxyStr, successBool=True)
+
+# Alternatively, after a confirmed proxy connection/transport failure:
+proxyStr = service.recordSubtitleTranslationResult(
+    proxyStr, successBool=False, proxyFailureBool=True,
+)
+
+# Unrelated translation failures do not affect the counter:
+proxyStr = service.recordSubtitleTranslationResult(proxyStr, successBool=False)
+```
+
+Each call returns the proxy to use next, or `None` if rediscovery finds no usable
+replacement. At `>= 50` or `<= -5`, fresh `search()` runs immediately. It excludes
+proxies at either limit, including saved and newly discovered candidates. No
+subtitle is automatically retried. Only classify confirmed proxy failures as
+`proxyFailureBool=True`, not invalid input, provider quotas, or application errors.
+
+The actual KeyVal key is a hash of the counter namespace, existing pool namespace,
+and normalized proxy address. Obtain it with
+`service.getKeyValProxyTranslationCountKey(proxyStr)`. This keeps counters separate
+from the cached proxy list and from other pools/proxies. Values are plain signed
+decimal strings (`"1"`, `"50"`, `"-5"`), not JSON lists or history objects. Missing
+keys mean zero and are created on the first reported outcome. A new proxy starts
+at zero; a proxy already at a threshold stays retired, including for late reports.
+
+Counters use the same KeyVal provider/authentication as the proxy cache. Both
+cache flags set to `False` keep counters entirely local. With
+`saveWorkingProxyBool=False`, feedback is retained locally without database
+writes; otherwise each outcome is persisted. Skipping saved proxy selection with
+`useSavedProxyBool=False` still reads counters when saving is enabled, to exclude
+exhausted candidates during discovery.
+
+KeyVal failures do not turn a completed translation into an error: local counter
+progress is retained, thresholds still apply, and later feedback retries writes.
+Verbose DEBUG output reports storage failure types without exposing keys or
+values. Unsaved progress cannot survive a restart. KeyVal read/modify/write is
+not atomic: use one reporting worker per pool namespace; concurrent writers
+require a provider with atomic counters. Limits depend on caller feedback and
+are not a distributed quota guarantee.
 
 ## Logging
 
