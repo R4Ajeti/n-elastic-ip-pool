@@ -293,18 +293,18 @@ Configure the signed translation counter independently of the existing Firebase
 selection/usage history:
 
 ```text
-KEY_VAL_PROXY_TRANSLATION_COUNT_KEY=n-elastic-ip-pool-proxy-translation-count
 PROXY_TRANSLATION_MAX_USE_COUNT=50
-PROXY_TRANSLATION_MIN_HEALTH_COUNT=-5
+PROXY_TRANSLATION_MIN_HEALTH_COUNT=-3
 ```
 
 These settings work for both service classes and the app builder. Explicit
-constructor arguments (`keyValProxyTranslationCountKeyStr`,
-`proxyTranslationMaxUseCountInt`, `proxyTranslationMinHealthCountInt`) override
+constructor arguments (`proxyTranslationMaxUseCountInt`,
+`proxyTranslationMinHealthCountInt`) override
 the process environment, which overrides `.env` (or `envFilePathStr`). Missing,
-blank, malformed, or wrong-sign environment limits fall back to `50` and `-5`.
+blank, malformed, or wrong-sign environment limits fall back to `50` and `-3`.
 
-The counter is **successful subtitles minus proxy-caused failures**. It is not
+One shared counter covers the entire proxy list, accumulating **successful
+subtitles minus proxy-caused failures** across all its proxies. It is not
 a total-success counter or a consecutive-failure counter. Selection and health
 checks do not change it; existing Firebase selection history and its separate
 `maxProxyUsageCountInt` option remain unchanged for compatibility.
@@ -332,8 +332,9 @@ proxyStr = service.recordSubtitleTranslationResult(proxyStr, successBool=False)
 ```
 
 Each call returns the proxy to use next, or `None` if rediscovery finds no usable
-replacement. By default, at `>= 50` or `<= -5`, fresh `search()` runs immediately. It excludes
-proxies at either limit, including saved and newly discovered candidates. No
+replacement. By default, at `>= 50` or `<= -3`, fresh `search()` runs immediately.
+An exhausted shared counter prevents reuse of the cached list, but does not
+block fresh candidate validation. Per-proxy Firebase exclusions still apply. No
 subtitle is automatically retried. Only classify confirmed proxy failures as
 `proxyFailureBool=True`, not invalid input, provider quotas, or application errors.
 With `rediscoverBool=False`, only feedback is recorded and the same proxy string
@@ -341,11 +342,17 @@ is returned (not a recommendation to reuse it). The next pool lookup enforces
 the persisted limits. This lets a consumer finish its already-validated retry
 list without fetching the pool again during a subtitle.
 
-The actual KeyVal key is a hash of the counter namespace, existing pool namespace,
-and normalized proxy address. Obtain it with
-`service.getKeyValProxyTranslationCountKey(proxyStr)`. This keeps counters separate
-from the cached proxy list and from other pools/proxies. Values are plain signed
-decimal strings (`"1"`, `"50"`, `"-5"`), not JSON lists or history objects. Missing
+The actual KeyVal key is the SHA-256 hash of the fixed variable name
+`keyValProxyTranslationCountKeyStr`. Obtain it with
+`service.getKeyValProxyTranslationCountKey()`; the existing `proxyStr` argument
+is optional and no longer affects the key. Proxy addresses, list contents, and
+configured namespace values never change it. The legacy
+`KEY_VAL_PROXY_TRANSLATION_COUNT_KEY` setting and constructor argument remain
+accepted for compatibility but no longer control the storage key. All instances
+using the same KeyVal database share this counter, even with different cache
+namespaces. Old per-proxy counters are not read, combined, or deleted.
+Values are plain signed decimal strings (`"1"`, `"50"`, `"-3"`), not JSON lists
+or history objects. Missing
 or null counters are initialized to `0` after selecting a validated cached proxy
 when writes are enabled, using the same KeyVal key/provider as translation
 feedback. The service reads the new record back to verify it. This initialization
@@ -356,23 +363,23 @@ Direct calls to `getProxyTranslationCount(proxyStr)` and
 `getProxyTranslationCountState(proxyStr)` also initialize a missing/null/empty
 counter immediately: GET the key, SET it to `0`, then GET it again to verify.
 This does not require running discovery or selecting a proxy first. Existing
-numeric values are preserved. Internal candidate eligibility checks use
+numeric values are preserved. Cache eligibility checks use
 `readProxyTranslationCountState(proxyStr)`, which only observes state and does
-not initialize unused candidates. A browser request to the KeyVal GET endpoint
-alone cannot create the key; the updated package must run for that proxy.
-Successful fresh discovery explicitly resets each proxy in the
-returned ranked working list to `0`, starting a new translation cycle even if
-that eligible proxy had a previous positive or negative count. This also applies
+not initialize the counter. A browser request to the KeyVal GET endpoint
+alone cannot create the key; the updated package must run.
+Successful fresh discovery resets the shared counter to `0` exactly once for
+the entire returned ranked working list, starting a new translation cycle.
+This also applies
 to fallback-provider discovery and threshold-triggered rediscovery. Cached-proxy
-checks and failed searches do not reset counters. Rejected/exhausted proxies and
-unrelated counters are untouched; proxies already at a threshold remain excluded.
+checks and failed searches do not reset the counter. Fresh discovery may return
+previously selected proxies if they pass validation and historical usage checks.
 
 Counters use the same KeyVal provider/authentication as the proxy cache. Both
 cache flags set to `False` keep counters entirely local. With
 `saveWorkingProxyBool=False`, feedback is retained locally without database
 writes; otherwise each outcome is persisted. Skipping saved proxy selection with
-`useSavedProxyBool=False` still reads counters when saving is enabled, to exclude
-exhausted candidates during discovery.
+`useSavedProxyBool=False` performs fresh discovery, resetting the shared counter
+only after a working list is found.
 
 KeyVal failures do not turn a completed translation into an error: local counter
 progress (including a fresh-discovery reset) is retained, thresholds still apply,
@@ -382,7 +389,7 @@ after each reset or translation-result update. Search your logs for
 `[translation-count]`, for example:
 
 ```text
-[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true
+[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true scope=pool
 ```
 
 Cached selections preserve existing counters and initialize only missing/null
@@ -390,7 +397,7 @@ ones, then log the current value. This works with
 `run()`, `get()`, and `check()` on the verbose service:
 
 ```text
-[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080
+[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080 scope=pool
 ```
 
 On read events, `source=keyval` means the value was read from the database
@@ -402,7 +409,7 @@ produces an explicit `no selected proxy` message instead of an invented key.
 
 The `[run] limits` line is configuration only: `historicalUsageLimit=100`
 belongs to the older Firebase usage history, while `translationMaxUseCount=50`
-and `translationMinHealthCount=-5` are the subtitle counter thresholds.
+and `translationMinHealthCount=-3` are the subtitle counter thresholds.
 Selection, validation, limits, and individual `[run] validated proxy:` timing
 details are DEBUG-only, along with advanced `[run] options` and setup notes.
 
@@ -417,7 +424,7 @@ To verify the saved proxy value as well, search for `[proxy-cache]`:
 actual hashed database key, and `value=` is the saved proxy list with credentials
 redacted. This is the stored snapshot, not a claim that every saved proxy is
 working; the separate working-proxy summary contains only validated entries.
-The cache key is separate from each proxy's translation-counter key.
+The cache key is separate from the shared translation-counter key.
 Missing/unavailable reads are labeled explicitly. Use the configured KeyVal
 database to look up either exact key; the logger does not expose bearer tokens
 or the unhashed namespace.
@@ -436,7 +443,7 @@ the INFO lines. `stored=false` means the number is only local: persistence is
 disabled or its write failed. Logs never include unhashed key namespaces, bearer
 tokens, or full KeyVal URLs. DEBUG output additionally reports storage failure
 types. Unsaved progress cannot survive a restart. KeyVal read/modify/write is
-not atomic: use one reporting worker per pool namespace; concurrent writers
+not atomic: use one reporting worker per KeyVal database; concurrent writers
 require a provider with atomic counters. Limits depend on caller feedback and
 are not a distributed quota guarantee.
 

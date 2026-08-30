@@ -10,6 +10,7 @@ from app.key_value_proxy_app import buildVerboseElasticIpPoolService
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_STR,
 )
+from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxyError
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
@@ -84,7 +85,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
 
     def testDeferredFeedbackDoesNotDiscoverAtEitherThreshold(self) -> None:
         for serviceClass in (ElasticIpPoolService, VerboseElasticIpPoolService):
-            for initialInt, successBool, expectedInt in ((49, True, 50), (-4, False, -5)):
+            for initialInt, successBool, expectedInt in ((49, True, 50), (-2, False, -3)):
                 with self.subTest(serviceClass=serviceClass, expectedInt=expectedInt):
                     service = self.buildService(serviceClass)
                     keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
@@ -97,21 +98,23 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                     self.assertEqual(self.store.valueByKeyDict[keyStr], str(expectedInt))
                     self.assertFalse(service.isProxyUsageAllowed(self.proxyStr))
 
-    def testDefaultsAndNamespaceIsolation(self) -> None:
+    def testDefaultsAndStableVariableNameKey(self) -> None:
         service = self.buildService()
         self.assertEqual(service.proxyTranslationMaxUseCountInt, 50)
-        self.assertEqual(service.proxyTranslationMinHealthCountInt, -5)
+        self.assertEqual(service.proxyTranslationMinHealthCountInt, -3)
         self.assertEqual(service.keyValProxyTranslationCountKeyStr,
                          DEFAULT_KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_STR)
         keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
         self.assertNotEqual(keyStr, service.getKeyValProxyKey())
         self.assertEqual(len(keyStr), 64)
+        self.assertEqual(keyStr, hashStringValue("keyValProxyTranslationCountKeyStr"))
+        self.assertEqual(keyStr, service.getKeyValProxyTranslationCountKey())
         for otherService, proxyStr in (
             (service, self.replacementStr),
             (self.buildService(keyValStoreProxyStr="another-pool"), self.proxyStr),
             (self.buildService(keyValProxyTranslationCountKeyStr="another-counter"), self.proxyStr),
         ):
-            self.assertNotEqual(keyStr, otherService.getKeyValProxyTranslationCountKey(proxyStr))
+            self.assertEqual(keyStr, otherService.getKeyValProxyTranslationCountKey(proxyStr))
 
     def testEnvironmentAndExplicitConstructorPrecedence(self) -> None:
         with patch.dict(os.environ, {
@@ -143,7 +146,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             }):
                 service = self.buildService()
                 self.assertEqual(service.proxyTranslationMaxUseCountInt, 50)
-                self.assertEqual(service.proxyTranslationMinHealthCountInt, -5)
+                self.assertEqual(service.proxyTranslationMinHealthCountInt, -3)
                 self.assertEqual(service.keyValProxyTranslationCountKeyStr,
                                  DEFAULT_KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_STR)
 
@@ -188,8 +191,8 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
         self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 0)
 
-    def testBothExactThresholdsTriggerFreshDiscoveryAndIsolateReplacement(self) -> None:
-        for startInt, successBool, expectedInt in ((49, True, 50), (-4, False, -5)):
+    def testBothExactThresholdsTriggerFreshDiscoveryAndResetSharedCounter(self) -> None:
+        for startInt, successBool, expectedInt in ((49, True, 50), (-2, False, -3)):
             with self.subTest(startInt=startInt):
                 self.store = MemoryKeyValStoreProxy()
                 service = self.buildService()
@@ -197,21 +200,26 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                 self.store.valueByKeyDict[keyStr] = str(startInt)
                 self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
                 resultStr = service.recordSubtitleTranslationResult(self.proxyStr, successBool, not successBool)
-                self.assertEqual(resultStr, self.replacementStr)
-                self.assertEqual(self.store.valueByKeyDict[keyStr], str(expectedInt))
+                self.assertEqual(resultStr, self.proxyStr)
+                self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
+                self.assertIn((keyStr, str(expectedInt)), self.store.writeList)
+                self.assertEqual(self.store.writeList.count((keyStr, "0")), 1)
                 self.assertEqual(service.proxyScrapeProxy.fetchCallCountInt, 1)
-                self.assertNotIn(self.proxyStr, service.elasticIpHealthCheckProxy.testCallList)
-                self.assertEqual(service.rankedProxyList, [self.replacementStr])
+                self.assertEqual(service.elasticIpHealthCheckProxy.testCallList,
+                                 [self.proxyStr, self.replacementStr])
+                self.assertEqual(service.rankedProxyList, [self.proxyStr, self.replacementStr])
                 self.assertEqual(service.getProxyTranslationCount(self.replacementStr), 0)
 
-    def testRestartSkipsPersistedThresholdAndOvershootInCacheAndDiscovery(self) -> None:
-        for countInt in (50, 999, -5, -999):
+    def testRestartSkipsExhaustedCacheButAllowsFreshDiscovery(self) -> None:
+        for countInt in (50, 999, -3, -999):
             with self.subTest(countInt=countInt):
                 service = self.buildService()
                 self.store.valueByKeyDict[service.getKeyValProxyTranslationCountKey(self.proxyStr)] = str(countInt)
                 self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
-                self.assertEqual(service.get(), self.replacementStr)
-                self.assertNotIn(self.proxyStr, service.elasticIpHealthCheckProxy.testCallList)
+                self.assertIsNone(service.check())
+                self.assertEqual(service.elasticIpHealthCheckProxy.testCallList, [])
+                self.assertEqual(service.get(), self.proxyStr)
+                self.assertEqual(service.getProxyTranslationCount(self.replacementStr), 0)
                 self.assertEqual(service.proxyScrapeProxy.fetchCallCountInt, 1)
 
     def testNoReplacementReturnsNoneAndClearsVerboseResult(self) -> None:
@@ -219,6 +227,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             VerboseElasticIpPoolService,
             loggerLevelStr="CRITICAL",
             proxyScrapeProxy=FakeProxyScrapeProxy(self.proxyStr),
+            elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
             proxyTranslationMaxUseCountInt=1,
         )
         service.finalValueStr = self.proxyStr
@@ -230,6 +239,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         service = self.buildService(
             VerboseElasticIpPoolService, loggerLevelStr="CRITICAL",
             proxyTranslationMaxUseCountInt=1,
+            proxyScrapeProxy=FakeProxyScrapeProxy(self.replacementStr),
         )
         self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, True), self.replacementStr)
         self.assertEqual(service.finalValueStr, self.replacementStr)
@@ -247,18 +257,22 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                 self.store.readErrorBool = False
                 self.store.writeErrorBool = False
                 self.store.storedBool = True
-                self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, True), self.replacementStr)
+                self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, True), self.proxyStr)
                 keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
-                self.assertEqual(self.store.valueByKeyDict[keyStr], "2")
+                self.assertIn((keyStr, "2"), self.store.writeList)
+                self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
+                self.assertEqual(service.proxyScrapeProxy.fetchCallCountInt, 1)
 
     def testPersistentStorageOutageStillEnforcesLowerLimit(self) -> None:
         service = self.buildService()
         self.store.readErrorBool = True
         self.store.writeErrorBool = True
-        for _ in range(4):
+        for _ in range(2):
             self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, False, True), self.proxyStr)
-        self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, False, True), self.replacementStr)
-        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), -5)
+        self.assertEqual(service.recordSubtitleTranslationResult(self.replacementStr, False, True), self.proxyStr)
+        self.assertIn((service.getKeyValProxyTranslationCountKey(), "-3"), self.store.writeList)
+        self.assertEqual(service.proxyScrapeProxy.fetchCallCountInt, 1)
+        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 0)
 
     def testMalformedStoredCountAndReadFailureRetainKnownCount(self) -> None:
         service = self.buildService()
@@ -287,30 +301,40 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
 
     def testInvalidFeedbackDoesNotWrite(self) -> None:
         service = self.buildService()
-        for proxyStr, successBool, failureBool in (("invalid", True, False), (self.proxyStr, True, True)):
+        for proxyStr, successBool, failureBool in (
+            (None, True, False), ("invalid", True, False), (self.proxyStr, True, True),
+        ):
             with self.assertRaises(ValueError):
                 service.recordSubtitleTranslationResult(proxyStr, successBool, failureBool)
         self.assertEqual(self.store.writeList, [])
 
-    def testLateSuccessCannotReviveFailedProxy(self) -> None:
+    def testLateSuccessCannotReviveExhaustedPoolWithoutDiscovery(self) -> None:
         service = self.buildService()
         keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
-        self.store.valueByKeyDict[keyStr] = "-5"
-        self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, True), self.replacementStr)
-        self.assertEqual(self.store.valueByKeyDict[keyStr], "-5")
+        self.store.valueByKeyDict[keyStr] = "-3"
+        self.assertEqual(service.recordSubtitleTranslationResult(
+            self.proxyStr, True, rediscoverBool=False,
+        ), self.proxyStr)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "-3")
+        self.assertFalse(service.isProxyUsageAllowed(self.replacementStr))
 
-    def testFreshDiscoveryResetsEveryReturnedProxyCounter(self) -> None:
+    def testFreshDiscoveryResetsOneSharedCounterForEntireList(self) -> None:
         service = self.buildService()
-        for proxyStr, countStr in ((self.proxyStr, "20"), (self.replacementStr, "-3")):
-            self.store.valueByKeyDict[service.getKeyValProxyTranslationCountKey(proxyStr)] = countStr
+        keyStr = service.getKeyValProxyTranslationCountKey()
+        self.store.valueByKeyDict[keyStr] = "20"
         self.assertEqual(service.search(), self.proxyStr)
+        self.assertEqual(service.rankedProxyList, [self.proxyStr, self.replacementStr])
+        self.assertEqual([write for write in self.store.writeList if write[0] == keyStr],
+                         [(keyStr, "0")])
         for proxyStr in service.rankedProxyList:
             self.assertEqual(service.getProxyTranslationCount(proxyStr), 0)
             self.assertEqual(self.store.valueByKeyDict[
                 service.getKeyValProxyTranslationCountKey(proxyStr)
             ], "0")
         service.recordSubtitleTranslationResult(self.proxyStr, True)
-        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 1)
+        self.assertEqual(service.getProxyTranslationCount(self.replacementStr), 1)
+        self.buildService().recordSubtitleTranslationResult(self.replacementStr, True)
+        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 2)
 
     def testCachedProxyCheckDoesNotResetCounter(self) -> None:
         service = self.buildService()
@@ -320,6 +344,45 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         self.assertEqual(service.get(), self.proxyStr)
         self.assertEqual(self.store.valueByKeyDict[keyStr], "20")
         self.assertEqual(self.store.writeList, [])
+
+    def testChangedDiscoveryListKeepsKeyAndLogsOneResetPerSearch(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
+        keyStr = service.getKeyValProxyTranslationCountKey()
+        for candidateTextStr in (
+            f"{self.proxyStr}\n{self.replacementStr}", self.replacementStr,
+        ):
+            service.proxyScrapeProxy = FakeProxyScrapeProxy(candidateTextStr)
+            self.store.writeList.clear()
+            with patch("builtins.print") as printMock:
+                self.assertIsNotNone(service.search())
+            logLineList = [
+                " ".join(str(value) for value in call.args)
+                for call in printMock.call_args_list
+            ]
+            resetLineList = [
+                lineStr for lineStr in logLineList
+                if "[translation-count]" in lineStr and "event=write" in lineStr
+            ]
+            self.assertEqual(len(resetLineList), 1)
+            self.assertIn(f"key={keyStr} count=0", resetLineList[0])
+            self.assertIn("scope=pool", resetLineList[0])
+            self.assertEqual([write for write in self.store.writeList if write[0] == keyStr],
+                             [(keyStr, "0")])
+
+    def testFailedRediscoveryPreservesSharedLimit(self) -> None:
+        for initialInt, successBool, limitInt in ((49, True, 50), (-2, False, -3)):
+            with self.subTest(limitInt=limitInt):
+                service = self.buildService(
+                    elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}),
+                )
+                keyStr = service.getKeyValProxyTranslationCountKey()
+                self.store.valueByKeyDict[keyStr] = str(initialInt)
+                self.store.writeList.clear()
+                self.assertIsNone(service.recordSubtitleTranslationResult(
+                    self.proxyStr, successBool, not successBool,
+                ))
+                self.assertEqual(service.getProxyTranslationCount(self.replacementStr), limitInt)
+                self.assertEqual(self.store.writeList, [(keyStr, str(limitInt))])
 
     def testFallbackDiscoveryResetsCounter(self) -> None:
         service = self.buildService(

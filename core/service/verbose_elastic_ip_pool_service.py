@@ -231,6 +231,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             fieldList.append(f"stored={str(storedBool).lower()}")
         if proxyStr is not None:
             fieldList.append(f"proxy={self.redactProxyValue(proxyStr)}")
+        fieldList.append("scope=pool")
         self.logInfo(
             "[translation-count]",
             *fieldList,

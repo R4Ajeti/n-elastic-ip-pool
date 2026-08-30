@@ -14,6 +14,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_PROXY_TRANSLATION_MAX_USE_COUNT_INT,
     DEFAULT_PROXY_TRANSLATION_MIN_HEALTH_COUNT_INT,
     KEY_VAL_PROXY_TRANSLATION_COUNT_KEY_ENV_NAME_STR,
+    KEY_VAL_PROXY_TRANSLATION_COUNT_VARIABLE_NAME_STR,
     PROXY_TRANSLATION_MAX_USE_COUNT_ENV_NAME_STR,
     PROXY_TRANSLATION_MIN_HEALTH_COUNT_ENV_NAME_STR,
     KEY_VAL_MAX_SAVED_PROXY_COUNT_INT,
@@ -173,10 +174,15 @@ class ElasticIpPoolService:
         if not savedProxyList:
             return None
 
+        if self.isProxyTranslationLimitReached(
+            self.readProxyTranslationCountState(str(savedProxyList[0]["proxy"]))["count"],
+        ):
+            return None
+
         workingProxyList = []
         for savedProxyDict in savedProxyList:
             proxyStr = str(savedProxyDict["proxy"])
-            if not self.isProxyUsageAllowed(proxyStr):
+            if not self.isProxyHistoryUsageAllowed(proxyStr):
                 continue
 
             testResultDict = self.testProxy(proxyStr)
@@ -257,8 +263,7 @@ class ElasticIpPoolService:
         selectedProxyStr = str(selectedProxyDict["proxy"])
 
         # Only a successful fresh discovery starts a new translation cycle.
-        for proxyStr in self.rankedProxyList:
-            self.resetProxyTranslationCount(proxyStr)
+        self.resetProxyTranslationCount(selectedProxyStr)
 
         if self.shouldSaveWorkingProxyList():
             try:
@@ -346,7 +351,7 @@ class ElasticIpPoolService:
         preparedProxyCandidateList = [
             proxyStr
             for proxyStr in preparedProxyCandidateList
-            if self.isProxyUsageAllowed(proxyStr)
+            if self.isProxyHistoryUsageAllowed(proxyStr)
         ]
 
         if self.proxyCandidateLimitInt:
@@ -407,7 +412,7 @@ class ElasticIpPoolService:
                 "lastCheckedAt": "",
             }
             for proxyStr in proxyCandidateList
-            if proxyUsagePrecheckedBool or self.isProxyUsageAllowed(proxyStr)
+            if proxyUsagePrecheckedBool or self.isProxyHistoryUsageAllowed(proxyStr)
         }
 
         for passNumberInt in range(1, self.proxyValidationSuccessCountInt + 1):
@@ -478,6 +483,10 @@ class ElasticIpPoolService:
         if self.isProxyTranslationLimitReached(self.readProxyTranslationCountState(proxyStr)["count"]):
             return False
 
+        return self.isProxyHistoryUsageAllowed(proxyStr)
+
+    def isProxyHistoryUsageAllowed(self, proxyStr: str) -> bool:
+        """Check per-resource history independently of the pool's translation cycle."""
         try:
             if self.proxyUsageHistoryRepo.isProxyDisabled(proxyStr):
                 return False
@@ -493,15 +502,15 @@ class ElasticIpPoolService:
 
         return True
 
-    def getKeyValProxyTranslationCountKey(self, proxyStr: str) -> str:
-        normalizedProxyStr = normalizeProxyAddress(proxyStr)
-        if not normalizedProxyStr:
+    def getKeyValProxyTranslationCountKey(self, proxyStr: str | None = None) -> str:
+        """Return one stable pool key, derived only from the variable name.
+
+        The optional proxy argument preserves existing callers and validation;
+        neither its address nor configured namespace values affect this key.
+        """
+        if proxyStr is not None and not normalizeProxyAddress(proxyStr):
             raise ValueError("A valid proxy address is required for translation feedback.")
-        return hashStringValue(json.dumps([
-            self.keyValProxyTranslationCountKeyStr,
-            self.keyValStoreProxyStr,
-            normalizedProxyStr,
-        ], separators=(",", ":")))
+        return hashStringValue(KEY_VAL_PROXY_TRANSLATION_COUNT_VARIABLE_NAME_STR)
 
     def getProxyTranslationCount(self, proxyStr: str) -> int:
         return self.getProxyTranslationCountState(proxyStr)["count"]
@@ -578,17 +587,18 @@ class ElasticIpPoolService:
 
         Call exactly once per subtitle, not per line, health check, or selection.
         Only explicitly proxy-caused failures decrement the signed counter.
-        KeyVal read/modify/write is intended for a single writer per namespace.
+        KeyVal read/modify/write is intended for a single writer per database.
         Set rediscoverBool=False when retaining a validated retry list for one
         subtitle; the next pool lookup enforces thresholds without a mid-job search.
         """
-        self.getKeyValProxyTranslationCountKey(proxyStr)
+        if not normalizeProxyAddress(proxyStr):
+            raise ValueError("A valid proxy address is required for translation feedback.")
         if successBool and proxyFailureBool:
             raise ValueError("A successful translation cannot also be a proxy failure.")
         if not successBool and not proxyFailureBool:
             return proxyStr
         countInt = self.getProxyTranslationCount(proxyStr)
-        # A late result cannot revive a proxy that has already reached a limit.
+        # A late result cannot revive a pool cycle that has already reached a limit.
         if not self.isProxyTranslationLimitReached(countInt):
             countInt += 1 if successBool else -1
         self.saveProxyTranslationCount(proxyStr, countInt)
@@ -597,7 +607,7 @@ class ElasticIpPoolService:
         return proxyStr
 
     def resetProxyTranslationCount(self, proxyStr: str) -> None:
-        """Start a new translation cycle for a freshly validated proxy."""
+        """Start one new translation cycle for the entire freshly validated pool."""
         self.saveProxyTranslationCount(proxyStr, 0)
         self.verifyProxyTranslationCount(proxyStr)
 
