@@ -68,6 +68,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     ) -> None:
         self.finalValueStr: str | None = None
         self.rankedProxyList: list[str] | None = None
+        self.lastCacheHitBool = False
         super().__init__(
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
@@ -101,6 +102,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
 
     def run(self) -> str | None:
         startFloat = time.perf_counter()
+        self.lastCacheHitBool = False
         keyValKeyHashStr = self.getKeyValProxyKey()
 
         self.logInfo("=== Proxy discovery run ===")
@@ -143,14 +145,15 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         if not self.finalValueStr:
             self.logInfo("[translation-count] no selected proxy; no counter to display")
 
-        self.logInfo(
-            "[run] selected proxy:",
-            self.redactProxyValue(self.finalValueStr) if self.finalValueStr else "none",
-        )
-        self.logInfo(
-            "[run] working proxy list:",
-            self.redactProxyListValue(self.rankedProxyList or []),
-        )
+        if not self.lastCacheHitBool:
+            self.logInfo(
+                "[run] selected proxy:",
+                self.redactProxyValue(self.finalValueStr) if self.finalValueStr else "none",
+            )
+            self.logInfo(
+                "[run] working proxy list:",
+                self.redactProxyListValue(self.rankedProxyList or []),
+            )
         for proxyDict in self.rankedProxyDictList or []:
             self.logDebug(
                 "[run] validated proxy:",
@@ -182,9 +185,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         proxyStr: str,
         successBool: bool,
         proxyFailureBool: bool = False,
+        rediscoverBool: bool = True,
     ) -> str | None:
         self.finalValueStr = super().recordSubtitleTranslationResult(
-            proxyStr, successBool, proxyFailureBool,
+            proxyStr, successBool, proxyFailureBool, rediscoverBool,
         )
         return self.finalValueStr
 
@@ -237,7 +241,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logInfo("[discovery] starting ProxyScrape search")
         try:
             resultStr = super().search()
-            self.logInfo(
+            self.logDebug(
                 "[discovery] fastest working proxy:",
                 self.redactProxyValue(resultStr) if resultStr else "none",
             )
@@ -402,11 +406,13 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def check(self) -> str | None:
         self.logInfo("[cache] checking saved proxy list")
         resultStr = super().check()
-        self.logInfo(
+        self.lastCacheHitBool = bool(resultStr)
+        logFunction = self.logInfo if resultStr else self.logDebug
+        logFunction(
             "[cache] usable saved proxy:",
             self.redactProxyValue(resultStr) if resultStr else "none",
         )
-        self.logInfo(
+        logFunction(
             "[cache] working proxy list:",
             self.redactProxyListValue(self.rankedProxyList or []),
         )

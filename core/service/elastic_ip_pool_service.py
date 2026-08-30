@@ -572,12 +572,15 @@ class ElasticIpPoolService:
         proxyStr: str,
         successBool: bool,
         proxyFailureBool: bool = False,
+        rediscoverBool: bool = True,
     ) -> str | None:
         """Report one completed subtitle outcome; return the next proxy to use.
 
         Call exactly once per subtitle, not per line, health check, or selection.
         Only explicitly proxy-caused failures decrement the signed counter.
         KeyVal read/modify/write is intended for a single writer per namespace.
+        Set rediscoverBool=False when retaining a validated retry list for one
+        subtitle; the next pool lookup enforces thresholds without a mid-job search.
         """
         self.getKeyValProxyTranslationCountKey(proxyStr)
         if successBool and proxyFailureBool:
@@ -589,7 +592,7 @@ class ElasticIpPoolService:
         if not self.isProxyTranslationLimitReached(countInt):
             countInt += 1 if successBool else -1
         self.saveProxyTranslationCount(proxyStr, countInt)
-        if self.isProxyTranslationLimitReached(countInt):
+        if rediscoverBool and self.isProxyTranslationLimitReached(countInt):
             return self.search()
         return proxyStr
 

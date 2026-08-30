@@ -82,6 +82,21 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         defaultDict.update(optionDict)
         return serviceClass(**defaultDict)
 
+    def testDeferredFeedbackDoesNotDiscoverAtEitherThreshold(self) -> None:
+        for serviceClass in (ElasticIpPoolService, VerboseElasticIpPoolService):
+            for initialInt, successBool, expectedInt in ((49, True, 50), (-4, False, -5)):
+                with self.subTest(serviceClass=serviceClass, expectedInt=expectedInt):
+                    service = self.buildService(serviceClass)
+                    keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+                    self.store.valueByKeyDict[keyStr] = str(initialInt)
+                    with patch.object(service, "search") as searchMock, patch("builtins.print"):
+                        service.recordSubtitleTranslationResult(
+                            self.proxyStr, successBool, not successBool, rediscoverBool=False,
+                        )
+                    searchMock.assert_not_called()
+                    self.assertEqual(self.store.valueByKeyDict[keyStr], str(expectedInt))
+                    self.assertFalse(service.isProxyUsageAllowed(self.proxyStr))
+
     def testDefaultsAndNamespaceIsolation(self) -> None:
         service = self.buildService()
         self.assertEqual(service.proxyTranslationMaxUseCountInt, 50)

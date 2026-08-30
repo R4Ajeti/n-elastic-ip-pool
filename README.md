@@ -321,15 +321,25 @@ proxyStr = service.recordSubtitleTranslationResult(
     proxyStr, successBool=False, proxyFailureBool=True,
 )
 
+# A consumer that already owns a validated retry list can defer rediscovery
+# until its next list lookup, preventing another pool request mid-subtitle:
+service.recordSubtitleTranslationResult(
+    proxyStr, successBool=True, rediscoverBool=False,
+)
+
 # Unrelated translation failures do not affect the counter:
 proxyStr = service.recordSubtitleTranslationResult(proxyStr, successBool=False)
 ```
 
 Each call returns the proxy to use next, or `None` if rediscovery finds no usable
-replacement. At `>= 50` or `<= -5`, fresh `search()` runs immediately. It excludes
+replacement. By default, at `>= 50` or `<= -5`, fresh `search()` runs immediately. It excludes
 proxies at either limit, including saved and newly discovered candidates. No
 subtitle is automatically retried. Only classify confirmed proxy failures as
 `proxyFailureBool=True`, not invalid input, provider quotas, or application errors.
+With `rediscoverBool=False`, only feedback is recorded and the same proxy string
+is returned (not a recommendation to reuse it). The next pool lookup enforces
+the persisted limits. This lets a consumer finish its already-validated retry
+list without fetching the pool again during a subtitle.
 
 The actual KeyVal key is a hash of the counter namespace, existing pool namespace,
 and normalized proxy address. Obtain it with
@@ -462,10 +472,18 @@ including when another application calls it. For example:
 ```text
 [n-elastic-ip-pool] [INFO] [cache] usable saved proxy: proxy-one.example.net:8080
 [n-elastic-ip-pool] [INFO] [cache] working proxy list: ["proxy-one.example.net:8080"]
+```
+
+On a cache miss, only the run selection/list summary is printed at INFO after
+discovery instead:
+
+```text
 [n-elastic-ip-pool] [INFO] [run] selected proxy: proxy-one.example.net:8080
 [n-elastic-ip-pool] [INFO] [run] working proxy list: ["proxy-one.example.net:8080"]
 ```
 
+Each lookup emits one `[run] took` line. Consumers should retain the returned
+working list for retries rather than call `run()` again per attempt.
 An empty result is logged as `none` and `[]`. A passing pool check confirms only
 the configured health-check target, not every destination website. With
 `DEBUGGING` unset or blank, `LOGGER=WARNING`, `ERROR`, or `CRITICAL` suppresses

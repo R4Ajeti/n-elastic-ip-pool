@@ -120,8 +120,8 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             service.run()
         outputStr = "\n".join(" ".join(str(value) for value in call.args) for call in printMock.call_args_list)
         self.assertIn('[cache] working proxy list: ["working.example.net:8080"]', outputStr)
-        self.assertIn('[run] working proxy list: ["working.example.net:8080"]', outputStr)
-        self.assertIn('[run] selected proxy: working.example.net:8080', outputStr)
+        self.assertNotIn('[run] working proxy list:', outputStr)
+        self.assertNotIn('[run] selected proxy:', outputStr)
         self.assertNotIn('[run] validated proxy:', outputStr)
         workingOutputStr = "\n".join(
             lineStr for lineStr in outputStr.splitlines()
@@ -187,7 +187,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertIn("[candidate] valid proxy count: 1", printedTextStr)
         self.assertNotIn("[candidate] 1/1: proxy-one.example.net:8080", printedTextStr)
         self.assertNotIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
-        self.assertIn("[cache] usable saved proxy: none", printedTextStr)
+        self.assertNotIn("[cache] usable saved proxy: none", printedTextStr)
         self.assertRegex(printedTextStr, r"\[discovery\] took \d+\.\d{3} seconds")
         self.assertRegex(printedTextStr, r"\[run\] took \d+\.\d{3} seconds")
 
@@ -266,13 +266,19 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
-        with patch("builtins.print"):
+        with patch("builtins.print") as printMock:
             self.assertEqual(service.run(), "saved-fast.example.net:8080")
             self.assertEqual(service.rankedProxyList, ["saved-fast.example.net:8080"])
 
+            printMock.reset_mock()
             service.elasticIpHealthCheckProxy = FakeElasticIpHealthCheckProxy()
             self.assertIsNone(service.run())
 
+        outputStr = "\n".join(" ".join(map(str, call.args)) for call in printMock.call_args_list)
+        self.assertIn("[run] selected proxy: none", outputStr)
+        self.assertIn("[run] working proxy list: []", outputStr)
+        self.assertNotIn("[cache] working proxy list:", outputStr)
+        self.assertEqual(outputStr.count("[run] took"), 1)
         self.assertIsNone(service.finalValueStr)
         self.assertEqual(service.rankedProxyList, [])
         self.assertEqual(service.rankedProxyDictList, [])

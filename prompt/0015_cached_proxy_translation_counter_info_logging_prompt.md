@@ -272,3 +272,34 @@ and candidate filtering use the separate read-only method to prevent recursion
 and avoid unused candidate records. Updated offline verification: 160 tests
 passed, with 2 existing skips; the exact missing-response → SET 0 → GET sequence
 is covered for both public getters. Version remains `1.0.5`.
+
+## Single Lookup and Consumer Feedback Follow-up
+
+Keep both package versions unchanged. Commit and push the verified changes.
+On a cache hit, emit the selected proxy and working list only under `[cache]` at
+INFO; on discovery, emit them under `[run]`. Keep individual validation and run
+configuration details at DEBUG. Each pool lookup emits one `[run] took` line.
+
+Update no-driver-translate to acquire one validated working list per subtitle,
+retain its service instance, and use at most min(max_attempts, working list size)
+distinct proxies without calling discovery again during retries or SRT recovery.
+Never fall back to a direct route when the pool is exhausted. Refresh the list
+for a subsequent subtitle, including when the Translator object is reused.
+
+Report one successful completed/reconstructed subtitle for its actual final
+proxy, and report each explicitly proxy-caused failed attempt (including the
+last) once. Do not count individual cues, raw text, cancelled jobs, reconstruction
+errors, or unrelated browser errors as successful subtitles or proxy failures.
+Retain the existing immediate-rediscovery feedback API default, but allow this
+consumer to defer threshold-triggered discovery until the next subtitle lookup.
+Test these contracts offline, including persistence from 0 to 1, final failures,
+thresholds, repeated Translator use, and INFO summary deduplication. Do not copy
+production logs, perform live translations, or change browser identity logic.
+
+Implemented this follow-up in the pool and the authorized no-driver-translate
+consumer. Offline verification: pool suite 161 passed with 2 existing skips;
+consumer suite 128 passed against the updated local pool package. Integration
+tests exercise the real pool service with a fake KeyVal store and browser,
+including a three-attempt run with counters -1, -1, and 1 and exactly one lookup.
+Boundary review: PASS; no new architecture violations or file moves/refactors
+required. No provider proxy classes changed. Versions remain 1.0.5 and 1.0.4.
