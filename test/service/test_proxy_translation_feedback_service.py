@@ -169,7 +169,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         self.assertEqual(service.search(), self.proxyStr)
         self.assertEqual(service.check(), self.proxyStr)
         keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
-        self.assertNotIn(keyStr, self.store.valueByKeyDict)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
         self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 0)
 
     def testBothExactThresholdsTriggerFreshDiscoveryAndIsolateReplacement(self) -> None:
@@ -282,6 +282,85 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         self.store.valueByKeyDict[keyStr] = "-5"
         self.assertEqual(service.recordSubtitleTranslationResult(self.proxyStr, True), self.replacementStr)
         self.assertEqual(self.store.valueByKeyDict[keyStr], "-5")
+
+    def testFreshDiscoveryResetsEveryReturnedProxyCounter(self) -> None:
+        service = self.buildService()
+        for proxyStr, countStr in ((self.proxyStr, "20"), (self.replacementStr, "-3")):
+            self.store.valueByKeyDict[service.getKeyValProxyTranslationCountKey(proxyStr)] = countStr
+        self.assertEqual(service.search(), self.proxyStr)
+        for proxyStr in service.rankedProxyList:
+            self.assertEqual(service.getProxyTranslationCount(proxyStr), 0)
+            self.assertEqual(self.store.valueByKeyDict[
+                service.getKeyValProxyTranslationCountKey(proxyStr)
+            ], "0")
+        service.recordSubtitleTranslationResult(self.proxyStr, True)
+        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 1)
+
+    def testCachedProxyCheckDoesNotResetCounter(self) -> None:
+        service = self.buildService()
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        self.store.valueByKeyDict[keyStr] = "20"
+        self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
+        self.assertEqual(service.get(), self.proxyStr)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "20")
+        self.assertEqual(self.store.writeList, [])
+
+    def testFallbackDiscoveryResetsCounter(self) -> None:
+        service = self.buildService(
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(self.proxyStr),
+        )
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        self.store.valueByKeyDict[keyStr] = "-2"
+        self.assertEqual(service.search(), self.proxyStr)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
+
+    def testFailedDiscoveryDoesNotResetCounter(self) -> None:
+        service = self.buildService(elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy({}))
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        self.store.valueByKeyDict[keyStr] = "20"
+        self.assertIsNone(service.search())
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "20")
+        self.assertEqual(self.store.writeList, [])
+
+    def testResetWriteFailureKeepsZeroLocallyUntilNextFeedback(self) -> None:
+        service = self.buildService()
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        self.store.valueByKeyDict[keyStr] = "20"
+        self.store.writeErrorBool = True
+        self.assertEqual(service.search(), self.proxyStr)
+        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 0)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "20")
+        self.store.writeErrorBool = False
+        service.recordSubtitleTranslationResult(self.proxyStr, True)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "1")
+
+    def testInfoLogsExactCounterKeyCountAndStorageStatusWithoutSecrets(self) -> None:
+        service = self.buildService(
+            VerboseElasticIpPoolService, loggerLevelStr="INFO",
+            keyValProxyTranslationCountKeyStr="private-counter-namespace",
+        )
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        for storedBool in (True, False):
+            self.store.storedBool = storedBool
+            with patch("builtins.print") as printMock:
+                service.resetProxyTranslationCount(self.proxyStr)
+                service.recordSubtitleTranslationResult(self.proxyStr, True)
+            textStr = "\n".join(
+                " ".join(str(value) for value in call.args)
+                for call in printMock.call_args_list
+            )
+            self.assertIn(f"[translation-count] key={keyStr} count=0", textStr)
+            self.assertIn(f"[translation-count] key={keyStr} count=1", textStr)
+            self.assertIn(f"stored={str(storedBool).lower()}", textStr)
+            self.assertNotIn("private-counter-namespace", textStr)
+            self.assertNotIn("https://", textStr)
+
+    def testQuietLoggerSuppressesCounterInfo(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="WARNING")
+        with patch("builtins.print") as printMock:
+            service.resetProxyTranslationCount(self.proxyStr)
+        printMock.assert_not_called()
 
 
 if __name__ == "__main__":

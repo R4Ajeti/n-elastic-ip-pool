@@ -250,6 +250,10 @@ class ElasticIpPoolService:
         selectedProxyDict = self.rankedProxyDictList[0]
         selectedProxyStr = str(selectedProxyDict["proxy"])
 
+        # Only a successful fresh discovery starts a new translation cycle.
+        for proxyStr in self.rankedProxyList:
+            self.resetProxyTranslationCount(proxyStr)
+
         if self.shouldSaveWorkingProxyList():
             try:
                 self.saveWorkingProxyList(self.rankedProxyDictList)
@@ -527,7 +531,7 @@ class ElasticIpPoolService:
         Only explicitly proxy-caused failures decrement the signed counter.
         KeyVal read/modify/write is intended for a single writer per namespace.
         """
-        keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
+        self.getKeyValProxyTranslationCountKey(proxyStr)
         if successBool and proxyFailureBool:
             raise ValueError("A successful translation cannot also be a proxy failure.")
         if not successBool and not proxyFailureBool:
@@ -536,19 +540,38 @@ class ElasticIpPoolService:
         # A late result cannot revive a proxy that has already reached a limit.
         if not self.isProxyTranslationLimitReached(countInt):
             countInt += 1 if successBool else -1
+        self.saveProxyTranslationCount(proxyStr, countInt)
+        if self.isProxyTranslationLimitReached(countInt):
+            return self.search()
+        return proxyStr
+
+    def resetProxyTranslationCount(self, proxyStr: str) -> None:
+        """Start a new translation cycle for a freshly validated proxy."""
+        self.saveProxyTranslationCount(proxyStr, 0)
+
+    def saveProxyTranslationCount(self, proxyStr: str, countInt: int) -> None:
+        keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
         self.proxyTranslationCountByKeyDict[keyStr] = countInt
         self.unsavedProxyTranslationKeySet.add(keyStr)
+        storedBool = False
         if self.saveWorkingProxyBool and self.hasWorkingProxySaveTarget():
             try:
                 resultDict = self.keyValStoreProxy.setValue(keyStr, str(countInt))
                 if not resultDict.get("stored"):
                     raise KeyValStoreProxyError("Translation count was not stored.")
                 self.unsavedProxyTranslationKeySet.discard(keyStr)
+                storedBool = True
             except KeyValStoreProxyError as error:
                 self.onProxyTranslationCountFailure(error)
-        if self.isProxyTranslationLimitReached(countInt):
-            return self.search()
-        return proxyStr
+        self.onProxyTranslationCountUpdated(keyStr, countInt, storedBool)
+
+    def onProxyTranslationCountUpdated(
+        self,
+        keyStr: str,
+        countInt: int,
+        storedBool: bool,
+    ) -> None:
+        return None
 
     def onProxyTranslationCountFailure(self, error: Exception) -> None:
         return None

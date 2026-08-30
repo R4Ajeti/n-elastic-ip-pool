@@ -176,6 +176,19 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def onProxyTranslationCountFailure(self, error: Exception) -> None:
         self.logDebug("[translation-count] using local state:", error.__class__.__name__)
 
+    def onProxyTranslationCountUpdated(
+        self,
+        keyStr: str,
+        countInt: int,
+        storedBool: bool,
+    ) -> None:
+        self.logInfo(
+            "[translation-count]",
+            f"key={keyStr}",
+            f"count={countInt}",
+            f"stored={str(storedBool).lower()}",
+        )
+
     def search(self) -> str | None:
         startFloat = time.perf_counter()
         self.logInfo("[discovery] starting ProxyScrape search")

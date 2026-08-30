@@ -368,7 +368,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         resultStr = service.get()
 
         self.assertEqual(resultStr, "proxy-new.example.net:8080")
-        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 1)
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 2)
 
     def testGetCallsSearchWhenKeyValHasNoSavedProxy(self) -> None:
         proxyScrapeProxy = FakeProxyScrapeProxy("proxy-new.example.net:8080\n")
@@ -522,7 +522,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         resultStr = service.search()
 
         self.assertEqual(resultStr, "proxy-new.example.net:8080")
-        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 1)
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 2)
         self.assertEqual(
             json.loads(keyValStoreProxy.setValueStr),
             ["proxy-new.example.net:8080"],
@@ -878,7 +878,7 @@ class ElasticIpPoolServiceTest(unittest.TestCase):
         resultStr = service.search()
 
         self.assertEqual(resultStr, "proxy-new.example.net:8080")
-        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 1)
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 2)
 
     def testBuildSavedProxyValueStrStopsBeforeKeyValValueLimit(self) -> None:
         service = ElasticIpPoolService(

@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` (version `1.0.3`) is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.4`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
@@ -336,8 +336,12 @@ and normalized proxy address. Obtain it with
 `service.getKeyValProxyTranslationCountKey(proxyStr)`. This keeps counters separate
 from the cached proxy list and from other pools/proxies. Values are plain signed
 decimal strings (`"1"`, `"50"`, `"-5"`), not JSON lists or history objects. Missing
-keys mean zero and are created on the first reported outcome. A new proxy starts
-at zero; a proxy already at a threshold stays retired, including for late reports.
+keys mean zero. Successful fresh discovery explicitly resets each proxy in the
+returned ranked working list to `0`, starting a new translation cycle even if
+that eligible proxy had a previous positive or negative count. This also applies
+to fallback-provider discovery and threshold-triggered rediscovery. Cached-proxy
+checks and failed searches do not reset counters. Rejected/exhausted proxies and
+unrelated counters are untouched; proxies already at a threshold remain excluded.
 
 Counters use the same KeyVal provider/authentication as the proxy cache. Both
 cache flags set to `False` keep counters entirely local. With
@@ -347,9 +351,30 @@ writes; otherwise each outcome is persisted. Skipping saved proxy selection with
 exhausted candidates during discovery.
 
 KeyVal failures do not turn a completed translation into an error: local counter
-progress is retained, thresholds still apply, and later feedback retries writes.
-Verbose DEBUG output reports storage failure types without exposing keys or
-values. Unsaved progress cannot survive a restart. KeyVal read/modify/write is
+progress (including a fresh-discovery reset) is retained, thresholds still apply,
+and later feedback retries writes.
+Verbose INFO output includes the hashed counter key, number, and save status
+after each reset or translation-result update. Search your logs for
+`[translation-count]`, for example:
+
+```text
+[translation-count] key=<hashed-counter-key> count=0 stored=true
+```
+
+Use the exact `key=` value in your KeyVal database to find the counter. You can
+also read it through the existing provider abstraction:
+
+```python
+keyStr = service.getKeyValProxyTranslationCountKey(proxyStr)
+counterDict = service.keyValStoreProxy.getValue(keyStr)
+print(counterDict["value"])
+```
+
+Use `DEBUGGING=false` or `LOGGER=INFO` with `VerboseElasticIpPoolService` to see
+the INFO lines. `stored=false` means the number is only local: persistence is
+disabled or its write failed. Logs never include unhashed key namespaces, bearer
+tokens, or full KeyVal URLs. DEBUG output additionally reports storage failure
+types. Unsaved progress cannot survive a restart. KeyVal read/modify/write is
 not atomic: use one reporting worker per pool namespace; concurrent writers
 require a provider with atomic counters. Limits depend on caller feedback and
 are not a distributed quota guarantee.
