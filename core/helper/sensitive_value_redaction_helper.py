@@ -15,6 +15,22 @@ def redactNetworkLocationValue(value) -> str:
     return NETWORK_LOCATION_PATTERN.sub("[redacted-network-location]", valueStr)
 
 
+def formatNetworkLocationForLog(value) -> str:
+    """Expose only host:port, never URL credentials, paths, queries or fragments."""
+    if not isinstance(value, str) or not value or any(char.isspace() for char in value):
+        return "[redacted]"
+    try:
+        parsedUrl = urlsplit(value if "://" in value else f"//{value}")
+        hostStr = parsedUrl.hostname
+        portInt = parsedUrl.port
+    except ValueError:
+        return "[redacted]"
+    locationStr = f"{hostStr}:{portInt}"
+    if not portInt or not NETWORK_LOCATION_PATTERN.fullmatch(locationStr):
+        return "[redacted]"
+    return locationStr
+
+
 def redactUrlPathValue(value) -> str:
     valueStr = str(value or "")
     if not valueStr:

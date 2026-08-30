@@ -298,10 +298,27 @@ LOGGER=INFO python3 app/key_value_proxy_app.py
 LOGGER=DEBUG python3 app/key_value_proxy_app.py
 ```
 
-`DEBUGGING=false` or `LOGGER=INFO` prints a compact discovery summary with
-proxy values redacted. `DEBUGGING=true` or `LOGGER=DEBUG` adds provider URLs,
-candidate rows, validation results, cache URL shapes, and workflow details
-while redacting proxy values and KeyVal paths.
+`DEBUGGING=false` or `LOGGER=INFO` prints the selected proxy, the validated
+working proxy list, and each working proxy's timing, success count and check
+timestamp. Cached entries that fail the current check are not in this list.
+`DEBUGGING=true` or `LOGGER=DEBUG` also prints candidate rows and detailed
+validation steps. Addresses are visible as `host:port`; credentials, URL paths,
+query strings and KeyVal paths are not included in proxy-value output.
+
+These messages come from `VerboseElasticIpPoolService.run()` in this package,
+including when another application calls it. For example:
+
+```text
+[cache] usable saved proxy: proxy-one.example.net:8080
+[cache] working proxy list: ["proxy-one.example.net:8080"]
+[run] selected proxy: proxy-one.example.net:8080
+[run] working proxy list: ["proxy-one.example.net:8080"]
+```
+
+An empty result is logged as `none` and `[]`. A passing pool check confirms only
+the configured health-check target, not every destination website. With
+`DEBUGGING` unset or blank, `LOGGER=WARNING`, `ERROR`, or `CRITICAL` suppresses
+these INFO/DEBUG messages; standard numeric levels are accepted too.
 
 ## Architecture
 

@@ -1,3 +1,4 @@
+import json
 import time
 
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
@@ -21,7 +22,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
 )
 from n_elastic_ip_pool.helper.logger_level_helper import getLoggerLevelNameFromEnv
 from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
-    redactNetworkLocationValue,
+    formatNetworkLocationForLog,
     redactUrlPathValue,
 )
 from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealthCheckProxy
@@ -123,6 +124,18 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             "[run] selected proxy:",
             self.redactProxyValue(self.finalValueStr) if self.finalValueStr else "none",
         )
+        self.logInfo(
+            "[run] working proxy list:",
+            self.redactProxyListValue(self.rankedProxyList or []),
+        )
+        for proxyDict in self.rankedProxyDictList or []:
+            self.logInfo(
+                "[run] validated proxy:",
+                self.redactProxyValue(proxyDict.get("proxy")),
+                f"averageTimingMs={proxyDict.get('averageTimingMs')}",
+                f"successCount={proxyDict.get('successCount')}",
+                f"checkedAt={proxyDict.get('lastCheckedAt')}",
+            )
         if self.useSavedProxyBool:
             self.logDebug(
                 "[run] cache read URL:",
@@ -282,6 +295,10 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             "[cache] usable saved proxy:",
             self.redactProxyValue(resultStr) if resultStr else "none",
         )
+        self.logInfo(
+            "[cache] working proxy list:",
+            self.redactProxyListValue(self.rankedProxyList or []),
+        )
         return resultStr
 
     def update(self, valueStr: str) -> str:
@@ -314,16 +331,33 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
 
     def normalizeLoggerLevel(self, loggerLevelStr: str) -> str:
         normalizedLoggerLevelStr = str(loggerLevelStr or DEFAULT_LOGGER_LEVEL_STR).upper()
-        if normalizedLoggerLevelStr == LOGGER_LEVEL_DEBUG_STR:
+        levelAliasDict = {
+            "WARN": "WARNING", "WARM": "WARNING", "0": "NOTSET",
+            "10": "DEBUG", "20": "INFO", "30": "WARNING",
+            "40": "ERROR", "50": "CRITICAL",
+        }
+        normalizedLoggerLevelStr = levelAliasDict.get(
+            normalizedLoggerLevelStr.strip(), normalizedLoggerLevelStr.strip(),
+        )
+        if normalizedLoggerLevelStr == "NOTSET":
             return LOGGER_LEVEL_DEBUG_STR
+        if normalizedLoggerLevelStr in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
+            return normalizedLoggerLevelStr
 
         return LOGGER_LEVEL_INFO_STR
 
     def redactProxyValue(self, proxyValue) -> str:
-        return redactNetworkLocationValue(proxyValue)
+        return formatNetworkLocationForLog(proxyValue)
 
     def redactProxyListValue(self, proxyListValue) -> str:
-        return redactNetworkLocationValue(proxyListValue)
+        if isinstance(proxyListValue, str):
+            try:
+                proxyListValue = json.loads(proxyListValue)
+            except (TypeError, ValueError):
+                return "[redacted]"
+        if not isinstance(proxyListValue, list):
+            return "[redacted]"
+        return json.dumps([self.redactProxyValue(value) for value in proxyListValue])
 
     def redactUrlValue(self, urlValue) -> str:
         return redactUrlPathValue(urlValue)
