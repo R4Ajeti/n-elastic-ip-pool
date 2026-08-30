@@ -69,9 +69,6 @@ def main() -> None:
     verboseElasticIpPoolService = buildVerboseElasticIpPoolService()
     verboseElasticIpPoolService.run()
 
-    print("Final selected proxy:", verboseElasticIpPoolService.finalValueStr)
-    print("Ranked proxy list:", verboseElasticIpPoolService.rankedProxyList)
-
 
 if __name__ == "__main__":
     main()

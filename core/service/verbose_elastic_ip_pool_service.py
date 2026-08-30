@@ -2,6 +2,7 @@ import json
 import time
 
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
+    CORE_LOGGER_PREFIX_STR,
     DEFAULT_LOGGER_LEVEL_STR,
     DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
     DEFAULT_PROXY_RELEASE_CHANNEL_STR,
@@ -13,6 +14,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEBUGGING_ENV_NAME_STR,
     KEY_VAL_DUMMY_PROXY_KEY_STR,
     KEY_VAL_DUMMY_PROXY_VALUE_STR,
+    KEY_VAL_STORE_PROXY_ENV_NAME_STR,
     LOGGER_LEVEL_DEBUG_STR,
     LOGGER_LEVEL_ENV_NAME_STR,
     LOGGER_LEVEL_INFO_STR,
@@ -106,20 +108,31 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logDebug("[run] hashed storage key:", "[redacted-storage-key]")
         self.logInfo("[run] log level:", self.loggerLevelStr)
         self.logInfo(
+            "[run] selection:",
+            f"mode={self.proxySelectionModeStr}",
+            f"resultCount={self.getReadableCountStr(self.proxyResultCountInt)}",
+        )
+        self.logInfo(
+            "[run] validation:",
+            f"passes={self.proxyValidationSuccessCountInt}",
+            f"maxTimingMs={self.proxyMaxTimingMillisecondInt}",
+        )
+        self.logInfo(
+            "[run] limits:",
+            f"translationMaxUseCount={self.proxyTranslationMaxUseCountInt}",
+            f"translationMinHealthCount={self.proxyTranslationMinHealthCountInt}",
+            f"historicalUsageLimit={self.maxProxyUsageCountInt}",
+        )
+        self.logDebug(
             "[run] options:",
             f"releaseChannel={self.releaseChannelStr}",
-            f"count={self.getReadableCountStr(self.proxyResultCountInt)}",
-            f"selectionMode={self.proxySelectionModeStr}",
             f"candidateLimit={self.getReadableCountStr(self.proxyCandidateLimitInt)}",
-            f"shuffleCandidates={self.proxyShuffleCandidateBool}",
-            f"validationCount={self.proxyValidationSuccessCountInt}",
-            f"maxTimingMs={self.proxyMaxTimingMillisecondInt}",
-            f"usageLimit={self.maxProxyUsageCountInt}",
-            f"useCache={self.useSavedProxyBool}",
-            f"save={self.saveWorkingProxyBool}",
+            f"shuffleCandidates={str(self.proxyShuffleCandidateBool).lower()}",
+            f"useCache={str(self.useSavedProxyBool).lower()}",
+            f"save={str(self.saveWorkingProxyBool).lower()}",
         )
         if self.useSavedProxyBool or self.saveWorkingProxyBool:
-            self.logInfo(
+            self.logDebug(
                 "[run] note: public KeyVal persistence needs a custom key source "
                 "for a separate cache namespace",
             )
@@ -127,6 +140,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             self.logInfo("[run] external cache persistence: disabled")
 
         self.finalValueStr = self.get()
+        if not self.finalValueStr:
+            self.logInfo("[translation-count] no selected proxy; no counter to display")
 
         self.logInfo(
             "[run] selected proxy:",
@@ -182,11 +197,39 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         countInt: int,
         storedBool: bool,
     ) -> None:
+        self.logProxyTranslationCountState(
+            {"key": keyStr, "count": countInt, "source": "keyval" if storedBool else "local"},
+            "write",
+            storedBool,
+        )
+
+    def logSelectedProxyTranslationCount(self, proxyStr: str) -> None:
+        if self.loggerLevelStr not in {LOGGER_LEVEL_INFO_STR, LOGGER_LEVEL_DEBUG_STR}:
+            return
+        self.logProxyTranslationCountState(
+            self.getProxyTranslationCountState(proxyStr), "read", proxyStr=proxyStr,
+        )
+
+    def logProxyTranslationCountState(
+        self,
+        stateDict: dict,
+        eventStr: str,
+        storedBool: bool | None = None,
+        proxyStr: str | None = None,
+    ) -> None:
+        fieldList = [
+            f"key={stateDict['key']}",
+            f"count={stateDict['count']}",
+            f"source={stateDict['source']}",
+            f"event={eventStr}",
+        ]
+        if storedBool is not None:
+            fieldList.append(f"stored={str(storedBool).lower()}")
+        if proxyStr is not None:
+            fieldList.append(f"proxy={self.redactProxyValue(proxyStr)}")
         self.logInfo(
             "[translation-count]",
-            f"key={keyStr}",
-            f"count={countInt}",
-            f"stored={str(storedBool).lower()}",
+            *fieldList,
         )
 
     def search(self) -> str | None:
@@ -198,6 +241,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
                 "[discovery] fastest working proxy:",
                 self.redactProxyValue(resultStr) if resultStr else "none",
             )
+            if resultStr:
+                self.logSelectedProxyTranslationCount(resultStr)
             return resultStr
         finally:
             self.logInfo("[discovery] took", self.getElapsedSecondStr(startFloat), "seconds")
@@ -323,6 +368,37 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def onProxyUsageHistoryFailure(self, error: Exception) -> None:
         self.logDebug("[usage-history] skipped:", error.__class__.__name__)
 
+    def onSavedProxyValueRead(self, keyStr: str, resultDict: dict | None) -> None:
+        if resultDict is None:
+            self.logInfo("[proxy-cache]", f"key={keyStr}", "value=unavailable source=unavailable event=read")
+            return
+        self.logProxyCacheValue(
+            keyStr,
+            str(resultDict.get("value") or ""),
+            "keyval" if resultDict.get("exists") else "missing",
+            "read",
+        )
+
+    def logProxyCacheValue(
+        self, keyStr: str, valueStr: str, sourceStr: str, eventStr: str,
+    ) -> None:
+        try:
+            proxyList = self.parseSavedProxyList(valueStr)
+        except (TypeError, ValueError):
+            proxyList = []
+        safeValueStr = self.redactProxyListValue([
+            proxyDict["proxy"] for proxyDict in proxyList
+        ]) if proxyList or not valueStr else "[redacted]"
+        self.logInfo(
+            "[proxy-cache]",
+            f"variable={KEY_VAL_STORE_PROXY_ENV_NAME_STR}",
+            f"key={keyStr}",
+            f"value={safeValueStr}",
+            f"source={sourceStr}",
+            f"event={eventStr}",
+            "state=stored-value",
+        )
+
     def check(self) -> str | None:
         self.logInfo("[cache] checking saved proxy list")
         resultStr = super().check()
@@ -334,6 +410,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             "[cache] working proxy list:",
             self.redactProxyListValue(self.rankedProxyList or []),
         )
+        if resultStr:
+            self.logSelectedProxyTranslationCount(resultStr)
         return resultStr
 
     def update(self, valueStr: str) -> str:
@@ -344,6 +422,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             self.redactUrlValue(self.keyValStoreProxy.buildSetUrl(keyValKeyStr, valueStr)),
         )
         resultStr = super().update(valueStr)
+        self.logProxyCacheValue(keyValKeyStr, resultStr, "keyval", "write")
         self.logInfo("[cache] save complete")
         return resultStr
 
@@ -358,11 +437,16 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
 
     def logInfo(self, *valueTuple) -> None:
         if self.loggerLevelStr in {LOGGER_LEVEL_INFO_STR, LOGGER_LEVEL_DEBUG_STR}:
-            print(*valueTuple)
+            self.logMessage(LOGGER_LEVEL_INFO_STR, *valueTuple)
 
     def logDebug(self, *valueTuple) -> None:
         if self.loggerLevelStr == LOGGER_LEVEL_DEBUG_STR:
-            print(*valueTuple)
+            self.logMessage(LOGGER_LEVEL_DEBUG_STR, *valueTuple)
+
+    def logMessage(self, levelStr: str, *valueTuple) -> None:
+        messageStr = " ".join(str(value) for value in valueTuple)
+        for lineStr in messageStr.splitlines() or [""]:
+            print(CORE_LOGGER_PREFIX_STR, f"[{levelStr}]", lineStr)
 
     def normalizeLoggerLevel(self, loggerLevelStr: str) -> str:
         normalizedLoggerLevelStr = str(loggerLevelStr or DEFAULT_LOGGER_LEVEL_STR).upper()

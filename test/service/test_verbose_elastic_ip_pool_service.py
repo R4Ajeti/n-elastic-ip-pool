@@ -123,7 +123,12 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertIn('[run] working proxy list: ["working.example.net:8080"]', outputStr)
         self.assertIn('[run] selected proxy: working.example.net:8080', outputStr)
         self.assertIn('averageTimingMs=50 successCount=1 checkedAt=', outputStr)
-        self.assertNotIn('failed.example.net:8080', outputStr)
+        workingOutputStr = "\n".join(
+            lineStr for lineStr in outputStr.splitlines()
+            if "[proxy-cache]" not in lineStr
+        )
+        self.assertNotIn('failed.example.net:8080', workingOutputStr)
+        self.assertIn('state=stored-value', outputStr)
         self.assertNotIn('[validation] testing proxy:', outputStr)
 
     def testWarningAndErrorSuppressInfoAndDebug(self) -> None:
@@ -135,6 +140,19 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
                     service.logInfo("summary")
                     service.logDebug("details")
                 printMock.assert_not_called()
+
+    def testEveryLogLineHasPackagePrefixAndLevel(self) -> None:
+        service = VerboseElasticIpPoolService(loggerLevelStr="DEBUG")
+        with patch("builtins.print") as printMock:
+            service.logInfo("[test] info")
+            service.logDebug("[test] debug\nsecond line")
+        lineList = [" ".join(str(value) for value in call.args)
+                    for call in printMock.call_args_list]
+        self.assertEqual(lineList, [
+            "[n-elastic-ip-pool] [INFO] [test] info",
+            "[n-elastic-ip-pool] [DEBUG] [test] debug",
+            "[n-elastic-ip-pool] [DEBUG] second line",
+        ])
 
     def testProxyListLogNeverIncludesCredentialsOrQuerySecrets(self) -> None:
         service = VerboseElasticIpPoolService()

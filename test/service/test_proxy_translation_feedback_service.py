@@ -362,6 +362,93 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             service.resetProxyTranslationCount(self.proxyStr)
         printMock.assert_not_called()
 
+    def testCachedRunGetAndCheckLogStoredCounterWithoutChangingIt(self) -> None:
+        for methodStr in ("run", "get", "check"):
+            with self.subTest(methodStr=methodStr):
+                service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
+                keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+                self.store.valueByKeyDict[keyStr] = "12"
+                self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
+                with patch("builtins.print") as printMock:
+                    self.assertEqual(getattr(service, methodStr)(), self.proxyStr)
+                textStr = "\n".join(" ".join(str(value) for value in call.args)
+                                    for call in printMock.call_args_list)
+                self.assertIn(f"[translation-count] key={keyStr} count=12 source=keyval event=read", textStr)
+                self.assertIn(
+                    f'[proxy-cache] variable=keyValStoreProxyStr key={service.getKeyValProxyKey()} value=["{self.proxyStr}"] source=keyval event=read',
+                    textStr,
+                )
+                self.assertNotIn("[run] options:", textStr)
+                if methodStr == "run":
+                    self.assertIn("[run] selection: mode=fastest resultCount=all", textStr)
+                    self.assertIn("[run] validation: passes=1 maxTimingMs=2000", textStr)
+                    self.assertIn("translationMaxUseCount=50 translationMinHealthCount=-5 historicalUsageLimit=100", textStr)
+                self.assertEqual(self.store.valueByKeyDict[keyStr], "12")
+                self.assertEqual(self.store.writeList, [])
+
+    def testCachedMissingCounterLogDoesNotClaimZeroWasStored(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
+        with patch("builtins.print") as printMock:
+            self.assertEqual(service.run(), self.proxyStr)
+        textStr = "\n".join(" ".join(str(value) for value in call.args)
+                            for call in printMock.call_args_list)
+        self.assertIn(f"key={keyStr} count=0 source=missing event=read", textStr)
+        self.assertNotIn("stored=true", textStr)
+        self.assertNotIn(keyStr, self.store.valueByKeyDict)
+
+    def testCounterReadLogDistinguishesUnavailableDatabase(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        self.store.valueByKeyDict[keyStr] = "12"
+        self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 12)
+        self.store.readErrorBool = True
+        with patch("builtins.print") as printMock:
+            service.logSelectedProxyTranslationCount(self.proxyStr)
+        textStr = " ".join(str(value) for value in printMock.call_args.args)
+        self.assertIn(f"key={keyStr} count=12 source=local-fallback event=read", textStr)
+
+    def testQuietLoggerDoesNotReadCounterJustForDisplay(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="WARNING")
+        with patch.object(service, "getProxyTranslationCountState") as readMock:
+            with patch("builtins.print") as printMock:
+                service.logSelectedProxyTranslationCount(self.proxyStr)
+        readMock.assert_not_called()
+        printMock.assert_not_called()
+
+    def testRunWithoutProxyExplainsWhyNoCounterIsShown(self) -> None:
+        service = self.buildService(
+            VerboseElasticIpPoolService, loggerLevelStr="INFO",
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+        )
+        with patch("builtins.print") as printMock:
+            self.assertIsNone(service.run())
+        textStr = "\n".join(" ".join(str(value) for value in call.args)
+                            for call in printMock.call_args_list)
+        self.assertIn("[translation-count] no selected proxy; no counter to display", textStr)
+        self.assertNotIn("[translation-count] key=", textStr)
+
+    def testProxyCacheWriteLogsDatabaseKeyAndSavedValue(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
+        with patch("builtins.print") as printMock:
+            service.update(json.dumps([self.proxyStr]))
+        textStr = "\n".join(" ".join(str(value) for value in call.args)
+                            for call in printMock.call_args_list)
+        self.assertIn(f'key={service.getKeyValProxyKey()} value=["{self.proxyStr}"] source=keyval event=write', textStr)
+
+    def testProxyCacheLoggingRedactsUnsafeValuesAndHandlesMalformedUrls(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
+        for valueStr in (
+            '["http://sample-user:sample-password@proxy.example.net:8080/private?token=sample-secret"]',
+            '["http://[broken"]',
+        ):
+            with patch("builtins.print") as printMock:
+                service.logProxyCacheValue("safe-test-key", valueStr, "keyval", "read")
+            textStr = " ".join(str(value) for value in printMock.call_args.args)
+            for secretStr in ("sample-user", "sample-password", "sample-secret", "http://"):
+                self.assertNotIn(secretStr, textStr)
+
 
 if __name__ == "__main__":
     unittest.main()

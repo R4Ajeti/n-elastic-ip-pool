@@ -162,8 +162,10 @@ class ElasticIpPoolService:
         try:
             resultDict = self.keyValStoreProxy.getValue(keyValKeyStr)
         except KeyValStoreProxyError:
+            self.onSavedProxyValueRead(keyValKeyStr, None)
             return None
 
+        self.onSavedProxyValueRead(keyValKeyStr, resultDict)
         if not resultDict.get("exists") or not resultDict.get("value"):
             return None
 
@@ -206,6 +208,9 @@ class ElasticIpPoolService:
         )
 
         return selectedProxyStr
+
+    def onSavedProxyValueRead(self, keyStr: str, resultDict: dict | None) -> None:
+        return None
 
     def search(self) -> str | None:
         self.rankedProxyDictList = []
@@ -498,20 +503,28 @@ class ElasticIpPoolService:
         ], separators=(",", ":")))
 
     def getProxyTranslationCount(self, proxyStr: str) -> int:
+        return self.getProxyTranslationCountState(proxyStr)["count"]
+
+    def getProxyTranslationCountState(self, proxyStr: str) -> dict:
+        """Read a counter and distinguish stored values from local fallback."""
         keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
         localCountInt = self.proxyTranslationCountByKeyDict.get(keyStr, 0)
         if keyStr in self.unsavedProxyTranslationKeySet or not (
             self.useSavedProxyBool or self.saveWorkingProxyBool
         ):
-            return localCountInt
+            return {"key": keyStr, "count": localCountInt, "source": "local"}
         try:
             resultDict = self.keyValStoreProxy.getValue(keyStr)
             countInt = int(resultDict["value"]) if resultDict.get("exists") else 0
         except (KeyValStoreProxyError, TypeError, ValueError, KeyError) as error:
             self.onProxyTranslationCountFailure(error)
-            return localCountInt
+            return {"key": keyStr, "count": localCountInt, "source": "local-fallback"}
         self.proxyTranslationCountByKeyDict[keyStr] = countInt
-        return countInt
+        return {
+            "key": keyStr,
+            "count": countInt,
+            "source": "keyval" if resultDict.get("exists") else "missing",
+        }
 
     def isProxyTranslationLimitReached(self, countInt: int) -> bool:
         return (

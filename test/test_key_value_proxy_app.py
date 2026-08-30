@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.key_value_proxy_app import buildVerboseElasticIpPoolService
+from app.key_value_proxy_app import buildVerboseElasticIpPoolService, main
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_AUTH_TOKEN_ENV_NAME_STR,
     KEY_VAL_BASE_URL_ENV_NAME_STR,
@@ -13,6 +13,13 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
 
 
 class KeyValueProxyAppTest(unittest.TestCase):
+    def testMainUsesServiceLoggerWithoutDuplicateUnprefixedPrints(self) -> None:
+        with patch("app.key_value_proxy_app.buildVerboseElasticIpPoolService") as buildMock:
+            with patch("builtins.print") as printMock:
+                main()
+        buildMock.return_value.run.assert_called_once_with()
+        printMock.assert_not_called()
+
     def testBlankKeyValBaseUrlKeepsCacheAndSaveEnabledByDefault(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             service = buildVerboseElasticIpPoolService("missing.env")

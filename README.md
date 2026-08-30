@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` (version `1.0.4`) is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.5`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
@@ -358,8 +358,44 @@ after each reset or translation-result update. Search your logs for
 `[translation-count]`, for example:
 
 ```text
-[translation-count] key=<hashed-counter-key> count=0 stored=true
+[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true
 ```
+
+Cached selections also log the counter without modifying it. This works with
+`run()`, `get()`, and `check()` on the verbose service:
+
+```text
+[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080
+```
+
+On read events, `source=keyval` means the value was read from the database
+(on write events, it means the provider acknowledged the save). `source=missing`
+means the key does not exist yet (effective count zero). `source=local` means
+local-only/unsaved state; `source=local-fallback` means the database read failed
+or was invalid, so this is not a verified database value. No selected proxy
+produces an explicit `no selected proxy` message instead of an invented key.
+
+The `[run] limits` line is configuration only: `historicalUsageLimit=100`
+belongs to the older Firebase usage history, while `translationMaxUseCount=50`
+and `translationMinHealthCount=-5` are the subtitle counter thresholds.
+INFO startup output separates selection, validation, and limits into compact
+summaries. Advanced `[run] options` and setup notes are available at DEBUG.
+
+To verify the saved proxy value as well, search for `[proxy-cache]`:
+
+```text
+[n-elastic-ip-pool] [INFO] [proxy-cache] variable=keyValStoreProxyStr key=<proxy-cache-key> value=["proxy-one.example.net:8080"] source=keyval event=read state=stored-value
+[n-elastic-ip-pool] [INFO] [run] selected proxy: proxy-one.example.net:8080
+```
+
+`keyValStoreProxyStr` names the pool-key configuration variable; `key=` is the
+actual hashed database key, and `value=` is the saved proxy list with credentials
+redacted. This is the stored snapshot, not a claim that every saved proxy is
+working; the separate working-proxy summary contains only validated entries.
+The cache key is separate from each proxy's translation-counter key.
+Missing/unavailable reads are labeled explicitly. Use the configured KeyVal
+database to look up either exact key; the logger does not expose bearer tokens
+or the unhashed namespace.
 
 Use the exact `key=` value in your KeyVal database to find the counter. You can
 also read it through the existing provider abstraction:
@@ -381,6 +417,13 @@ are not a distributed quota guarantee.
 
 ## Logging
 
+Every package log line starts with the unique marker `[n-elastic-ip-pool]`,
+followed by `[INFO]` or `[DEBUG]` and its category. Search for
+`[n-elastic-ip-pool]` to find all package output, `[translation-count]` for the
+counter, or `[proxy-cache]` for the saved proxy key/value. Advanced details stay
+at DEBUG; normal INFO runs include configuration, cache state, the selected
+proxy, and its counter.
+
 The verbose service supports two log levels:
 
 ```bash
@@ -401,10 +444,10 @@ These messages come from `VerboseElasticIpPoolService.run()` in this package,
 including when another application calls it. For example:
 
 ```text
-[cache] usable saved proxy: proxy-one.example.net:8080
-[cache] working proxy list: ["proxy-one.example.net:8080"]
-[run] selected proxy: proxy-one.example.net:8080
-[run] working proxy list: ["proxy-one.example.net:8080"]
+[n-elastic-ip-pool] [INFO] [cache] usable saved proxy: proxy-one.example.net:8080
+[n-elastic-ip-pool] [INFO] [cache] working proxy list: ["proxy-one.example.net:8080"]
+[n-elastic-ip-pool] [INFO] [run] selected proxy: proxy-one.example.net:8080
+[n-elastic-ip-pool] [INFO] [run] working proxy list: ["proxy-one.example.net:8080"]
 ```
 
 An empty result is logged as `none` and `[]`. A passing pool check confirms only
