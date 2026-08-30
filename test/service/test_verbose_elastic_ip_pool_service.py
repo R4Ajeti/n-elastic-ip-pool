@@ -105,6 +105,17 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         environmentPatch.start()
         self.addCleanup(environmentPatch.stop)
 
+    def testFailedRunReportsTotalTimeOnceAndPreservesError(self) -> None:
+        service = VerboseElasticIpPoolService(loggerLevelStr="INFO")
+        with patch.object(service, "get", side_effect=RuntimeError("offline failure")), patch(
+            "builtins.print"
+        ) as printMock:
+            with self.assertRaisesRegex(RuntimeError, "offline failure"):
+                service.run()
+        outputStr = "\n".join(call.args[0] for call in printMock.call_args_list)
+        self.assertEqual(outputStr.count("Total run time:"), 1)
+        self.assertRegex(outputStr.splitlines()[-1], r"Total run time: \d+\.\d{2} seconds operation=run$")
+
     def testInfoShowsWorkingCachedListWithoutIndividualTimings(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
         keyValStoreProxy.valueStr = '["working.example.net:8080","failed.example.net:8080"]'
@@ -148,10 +159,12 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             service.logDebug("[test] debug\nsecond line")
         lineList = [" ".join(str(value) for value in call.args)
                     for call in printMock.call_args_list]
-        self.assertEqual(lineList, [
-            "[n-elastic-ip-pool] [INFO] [test] info",
-            "[n-elastic-ip-pool] [DEBUG] [test] debug",
-            "[n-elastic-ip-pool] [DEBUG] second line",
+        for lineStr in lineList:
+            self.assertRegex(lineStr, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} \| (INFO|DEBUG) \| n-elastic-ip-pool \| ")
+        self.assertEqual([lineStr.split(" | ", 1)[1] for lineStr in lineList], [
+            "INFO | n-elastic-ip-pool | [test] info",
+            "DEBUG | n-elastic-ip-pool | [test] debug",
+            "DEBUG | n-elastic-ip-pool | second line",
         ])
 
     def testProxyListLogNeverIncludesCredentialsOrQuerySecrets(self) -> None:
@@ -189,7 +202,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertNotIn("[validation] testing proxy: proxy-one.example.net:8080", printedTextStr)
         self.assertNotIn("[cache] usable saved proxy: none", printedTextStr)
         self.assertRegex(printedTextStr, r"\[discovery\] took \d+\.\d{3} seconds")
-        self.assertRegex(printedTextStr, r"\[run\] took \d+\.\d{3} seconds")
+        self.assertRegex(printedTextStr, r"Total run time: \d+\.\d{2} seconds operation=run")
 
     def testRunInfoPrintsValidationPassSummaryWhenProxyKeepsWorking(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
@@ -278,7 +291,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertIn("[run] selected proxy: none", outputStr)
         self.assertIn("[run] working proxy list: []", outputStr)
         self.assertNotIn("[cache] working proxy list:", outputStr)
-        self.assertEqual(outputStr.count("[run] took"), 1)
+        self.assertEqual(outputStr.count("Total run time:"), 1)
         self.assertIsNone(service.finalValueStr)
         self.assertEqual(service.rankedProxyList, [])
         self.assertEqual(service.rankedProxyDictList, [])

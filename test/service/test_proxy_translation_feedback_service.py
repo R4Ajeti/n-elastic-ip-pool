@@ -599,8 +599,8 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         textStr = "\n".join(" ".join(str(value) for value in call.args)
                             for call in printMock.call_args_list)
         for categoryStr in ("selection:", "validation:", "limits:", "validated proxy:"):
-            self.assertIn(f"[n-elastic-ip-pool] [DEBUG] [run] {categoryStr}", textStr)
-            self.assertNotIn(f"[n-elastic-ip-pool] [INFO] [run] {categoryStr}", textStr)
+            self.assertIn(f"DEBUG | n-elastic-ip-pool | [run] {categoryStr}", textStr)
+            self.assertNotIn(f"INFO | n-elastic-ip-pool | [run] {categoryStr}", textStr)
 
     def testRealKeyValContractCreatesAndReadsBackMissingOrNullCounter(self) -> None:
         for nullBool in (False, True):

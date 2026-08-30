@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` (version `1.0.5`) is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.6`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
@@ -389,7 +389,7 @@ after each reset or translation-result update. Search your logs for
 `[translation-count]`, for example:
 
 ```text
-[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true scope=pool
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true scope=pool
 ```
 
 Cached selections preserve existing counters and initialize only missing/null
@@ -397,7 +397,7 @@ ones, then log the current value. This works with
 `run()`, `get()`, and `check()` on the verbose service:
 
 ```text
-[n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080 scope=pool
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080 scope=pool
 ```
 
 On read events, `source=keyval` means the value was read from the database
@@ -416,8 +416,8 @@ details are DEBUG-only, along with advanced `[run] options` and setup notes.
 To verify the saved proxy value as well, search for `[proxy-cache]`:
 
 ```text
-[n-elastic-ip-pool] [INFO] [proxy-cache] variable=keyValStoreProxyStr key=<proxy-cache-key> value=["proxy-one.example.net:8080"] source=keyval event=read state=stored-value
-[n-elastic-ip-pool] [INFO] [run] selected proxy: proxy-one.example.net:8080
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [proxy-cache] variable=keyValStoreProxyStr key=<proxy-cache-key> value=["proxy-one.example.net:8080"] source=keyval event=read state=stored-value
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [run] selected proxy: proxy-one.example.net:8080
 ```
 
 `keyValStoreProxyStr` names the pool-key configuration variable; `key=` is the
@@ -449,9 +449,9 @@ are not a distributed quota guarantee.
 
 ## Logging
 
-Every package log line starts with the unique marker `[n-elastic-ip-pool]`,
-followed by `[INFO]` or `[DEBUG]` and its category. Search for
-`[n-elastic-ip-pool]` to find all package output, `[translation-count]` for the
+Every package log line starts with the local date and time including milliseconds,
+followed by ` | INFO | n-elastic-ip-pool | ` (or DEBUG) and its category. Search for
+`n-elastic-ip-pool` to find all package output, `[translation-count]` for the
 counter, or `[proxy-cache]` for the saved proxy key/value. Configuration and
 individual validation details stay at DEBUG; normal INFO runs include cache state, the selected
 proxy, and its counter.
@@ -477,19 +477,19 @@ These messages come from `VerboseElasticIpPoolService.run()` in this package,
 including when another application calls it. For example:
 
 ```text
-[n-elastic-ip-pool] [INFO] [cache] usable saved proxy: proxy-one.example.net:8080
-[n-elastic-ip-pool] [INFO] [cache] working proxy list: ["proxy-one.example.net:8080"]
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [cache] usable saved proxy: proxy-one.example.net:8080
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [cache] working proxy list: ["proxy-one.example.net:8080"]
 ```
 
 On a cache miss, only the run selection/list summary is printed at INFO after
 discovery instead:
 
 ```text
-[n-elastic-ip-pool] [INFO] [run] selected proxy: proxy-one.example.net:8080
-[n-elastic-ip-pool] [INFO] [run] working proxy list: ["proxy-one.example.net:8080"]
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [run] selected proxy: proxy-one.example.net:8080
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [run] working proxy list: ["proxy-one.example.net:8080"]
 ```
 
-Each lookup emits one `[run] took` line. Consumers should retain the returned
+Each lookup emits one `Total run time: <seconds> seconds operation=run` line. Consumers should retain the returned
 working list for retries rather than call `run()` again per attempt.
 An empty result is logged as `none` and `[]`. A passing pool check confirms only
 the configured health-check target, not every destination website. With
@@ -595,3 +595,13 @@ When contributing, keep these project rules intact:
 ## License
 
 MIT
+
+## Log format
+
+All package logs use `YYYY-MM-DD HH:MM:SS,mmm | LEVEL | n-elastic-ip-pool | message`.
+The total runtime uses two decimal places and includes the operation name, even
+when discovery raises an error. Existing INFO/DEBUG filtering and redaction remain unchanged.
+
+```text
+2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | Total run time: 22.56 seconds operation=run
+```

@@ -2,7 +2,8 @@ import json
 import time
 
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
-    CORE_LOGGER_PREFIX_STR,
+    CORE_LOGGER_NAME_STR,
+    LOGGER_FORMAT_STR,
     DEFAULT_LOGGER_LEVEL_STR,
     DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
     DEFAULT_PROXY_RELEASE_CHANNEL_STR,
@@ -23,6 +24,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
 from n_elastic_ip_pool.helper.logger_level_helper import getLoggerLevelNameFromEnv
+from n_elastic_ip_pool.helper.log_message_format_helper import formatLogMessage
 from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
     formatNetworkLocationForLog,
     redactUrlPathValue,
@@ -102,6 +104,15 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
 
     def run(self) -> str | None:
         startFloat = time.perf_counter()
+        try:
+            return self._runDiscovery()
+        finally:
+            self.logInfo(
+                "Total run time:", f"{max(0.0, time.perf_counter() - startFloat):.2f}",
+                "seconds operation=run",
+            )
+
+    def _runDiscovery(self) -> str | None:
         self.lastCacheHitBool = False
         keyValKeyHashStr = self.getKeyValProxyKey()
 
@@ -167,8 +178,6 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
                 "[run] cache read URL:",
                 self.redactUrlValue(self.keyValStoreProxy.buildGetUrl(keyValKeyHashStr)),
             )
-        self.logInfo("[run] took", self.getElapsedSecondStr(startFloat), "seconds")
-
         return self.finalValueStr
 
     def get(self) -> str | None:
@@ -453,7 +462,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def logMessage(self, levelStr: str, *valueTuple) -> None:
         messageStr = " ".join(str(value) for value in valueTuple)
         for lineStr in messageStr.splitlines() or [""]:
-            print(CORE_LOGGER_PREFIX_STR, f"[{levelStr}]", lineStr)
+            print(formatLogMessage(lineStr, CORE_LOGGER_NAME_STR, levelStr, LOGGER_FORMAT_STR))
 
     def normalizeLoggerLevel(self, loggerLevelStr: str) -> str:
         normalizedLoggerLevelStr = str(loggerLevelStr or DEFAULT_LOGGER_LEVEL_STR).upper()
