@@ -111,6 +111,9 @@ class ElasticIpPoolService:
         return self.search()
 
     def check(self) -> str | None:
+        # Previous results are not usable until this lookup validates them again.
+        self.rankedProxyDictList = []
+        self.rankedProxyList = []
         keyValKeyStr = self.getKeyValProxyKey()
         try:
             resultDict = self.keyValStoreProxy.getValue(keyValKeyStr)
@@ -161,6 +164,8 @@ class ElasticIpPoolService:
         return selectedProxyStr
 
     def search(self) -> str | None:
+        self.rankedProxyDictList = []
+        self.rankedProxyList = []
         proxyScrapeResultStr = self.searchProviderProxyCandidateList(
             PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR,
             self.fetchProxyScrapeCandidateText(),
@@ -178,6 +183,8 @@ class ElasticIpPoolService:
         sourceNameStr: str,
         proxyCandidateTextStr: str,
     ) -> str | None:
+        self.rankedProxyDictList = []
+        self.rankedProxyList = []
         proxyCandidateList = self.parseProxyCandidateList(proxyCandidateTextStr)
         if not proxyCandidateList:
             return None

@@ -193,6 +193,27 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertNotIn("saved-fast.example.net:8080", printedTextStr)
         self.assertNotIn("[discovery] starting ProxyScrape search", printedTextStr)
 
+    def testRepeatedRunClearsCachedProxyThatNoLongerWorks(self) -> None:
+        keyValStoreProxy = FakeKeyValStoreProxy()
+        keyValStoreProxy.valueStr = '["saved-fast.example.net:8080"]'
+        service = VerboseElasticIpPoolService(
+            keyValStoreProxy=keyValStoreProxy,
+            elasticIpHealthCheckProxy=FakeWorkingElasticIpHealthCheckProxy(),
+            proxyScrapeProxy=FakeProxyScrapeProxy(),
+            geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
+        )
+
+        with patch("builtins.print"):
+            self.assertEqual(service.run(), "saved-fast.example.net:8080")
+            self.assertEqual(service.rankedProxyList, ["saved-fast.example.net:8080"])
+
+            service.elasticIpHealthCheckProxy = FakeElasticIpHealthCheckProxy()
+            self.assertIsNone(service.run())
+
+        self.assertIsNone(service.finalValueStr)
+        self.assertEqual(service.rankedProxyList, [])
+        self.assertEqual(service.rankedProxyDictList, [])
+
     def testRunReturnsWorkingProxyWhenCacheSaveFails(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy(storedBool=False)
         service = VerboseElasticIpPoolService(

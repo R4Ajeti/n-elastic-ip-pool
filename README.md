@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.2`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
@@ -93,8 +93,8 @@ restriction bypass behavior.
   as a fallback.
 - `update(valueStr)` stores an explicit proxy value/list in KeyVal.
 - Candidate proxy rows are normalized and deduplicated before validation.
-- Working proxies must pass multiple validation checks before they are returned
-  or optionally saved.
+- Newly discovered proxies must pass the configured validation checks before
+  they are returned or optionally saved. Cached proxies must pass one fresh check.
 - Working proxies are ranked by average response timing, fastest first.
 - KeyVal keys are hashed before storage.
 - The verbose service exposes `finalValueStr` and `rankedProxyList` for manual
@@ -116,6 +116,13 @@ print(proxyStr)
 `get()` first tries cached KeyVal state through `check()`. If no saved proxy is
 usable, it calls `search()` to discover and validate fresh candidates. Working
 proxy lists are saved to KeyVal by default.
+
+Every eligible cached proxy is checked once during the current lookup. Only
+proxies that pass that check within the configured timing limit appear in
+`rankedProxyList` and `rankedProxyDictList`; a working entry does not make the
+rest of the cache usable. `get()` and `check()` return one selected working proxy,
+not the cached list. Previous ranked results are cleared on each lookup, leaving
+empty lists if no proxies pass and returning `None` when none are available.
 
 ## Public API
 

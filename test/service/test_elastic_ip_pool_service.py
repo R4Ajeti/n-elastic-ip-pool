@@ -1,5 +1,6 @@
 import json
 import unittest
+from unittest.mock import patch
 
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_DUMMY_PROXY_KEY_STR,
@@ -14,7 +15,7 @@ from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealt
 from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import (
     GeonodeFreeProxyListProxyError,
 )
-from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy, KeyValStoreProxyError
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxyError
 from n_elastic_ip_pool.repo.elastic_ip_pool_repo import ElasticIpPoolRepo
 from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
@@ -182,6 +183,102 @@ class FakeProxyUsageHistoryRepo:
 
 
 class ElasticIpPoolServiceTest(unittest.TestCase):
+    def testGetReturnsOnlyFreshlyValidatedCachedProxy(self) -> None:
+        savedProxyList = [
+            "failed.example.net:8080",
+            "working.example.net:8080",
+            "slow.example.net:8080",
+            "disabled.example.net:8080",
+            "overused.example.net:8080",
+        ]
+        keyValStoreProxy = FakeKeyValStoreProxy(
+            {"exists": True, "value": json.dumps(savedProxyList)},
+        )
+        healthCheckProxy = FakeElasticIpHealthCheckProxy(
+            {
+                savedProxyList[0]: [buildTestResult(savedProxyList[0], False, None)],
+                savedProxyList[1]: [buildTestResult(savedProxyList[1], True, 50)],
+                savedProxyList[2]: [buildTestResult(savedProxyList[2], True, 101)],
+            },
+        )
+        proxyScrapeProxy = FakeProxyScrapeProxy()
+        geonodeProxy = FakeGeonodeFreeProxyListProxy()
+        usageHistoryRepo = FakeProxyUsageHistoryRepo(
+            usageCountByProxyDict={savedProxyList[4]: MAX_PROXY_USAGE_COUNT_INT},
+            disabledProxySet={savedProxyList[3]},
+        )
+        service = ElasticIpPoolService(
+            elasticIpHealthCheckProxy=healthCheckProxy,
+            keyValStoreProxy=keyValStoreProxy,
+            proxyScrapeProxy=proxyScrapeProxy,
+            geonodeFreeProxyListProxy=geonodeProxy,
+            proxyUsageHistoryRepo=usageHistoryRepo,
+            proxyMaxTimingMillisecondInt=100,
+        )
+
+        self.assertEqual(service.get(), savedProxyList[1])
+        self.assertEqual(healthCheckProxy.testCallList, savedProxyList[:3])
+        self.assertEqual(service.rankedProxyList, [savedProxyList[1]])
+        self.assertEqual(
+            service.rankedProxyDictList,
+            [{
+                "proxy": savedProxyList[1],
+                "averageTimingMs": 50,
+                "successCount": 1,
+                "lastCheckedAt": "2026-01-01T00:00:00Z",
+            }],
+        )
+        self.assertEqual(proxyScrapeProxy.fetchCallCountInt, 0)
+        self.assertEqual(geonodeProxy.fetchCallCountInt, 0)
+        self.assertEqual(keyValStoreProxy.setValueCallCountInt, 0)
+
+    def testLookupClearsPreviousWorkingListWhenNoProxyIsUsable(self) -> None:
+        for methodNameStr in ("check", "get", "search", "searchProviderProxyCandidateList"):
+            for failureModeStr in ("failed", "empty", "invalid", "cache_error"):
+                with self.subTest(method=methodNameStr, failure=failureModeStr):
+                    proxyStr = "previous.example.net:8080"
+                    keyValStoreProxy = FakeKeyValStoreProxy(
+                        {"exists": True, "value": json.dumps([proxyStr])},
+                    )
+                    service = ElasticIpPoolService(
+                        elasticIpHealthCheckProxy=FakeElasticIpHealthCheckProxy(
+                            {proxyStr: [buildTestResult(proxyStr, True, 50)]},
+                        ),
+                        keyValStoreProxy=keyValStoreProxy,
+                        proxyScrapeProxy=FakeProxyScrapeProxy(),
+                        geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
+                        proxyUsageHistoryRepo=FakeProxyUsageHistoryRepo(),
+                    )
+                    self.assertEqual(service.check(), proxyStr)
+                    self.assertEqual(service.rankedProxyList, [proxyStr])
+
+                    if failureModeStr == "empty":
+                        keyValStoreProxy.getResultDict = {"exists": False}
+                    elif failureModeStr == "invalid":
+                        keyValStoreProxy.getResultDict = {
+                            "exists": True, "value": "{broken-json",
+                        }
+
+                    with patch.object(
+                        keyValStoreProxy,
+                        "getValue",
+                        side_effect=(
+                            KeyValStoreProxyError("cache unavailable")
+                            if failureModeStr == "cache_error" else None
+                        ),
+                        return_value=keyValStoreProxy.getResultDict,
+                    ):
+                        method = getattr(service, methodNameStr)
+                        resultStr = (
+                            method(PROXY_SOURCE_PROXYSCRAPE_DISCOVERED_PROXY_STR, "")
+                            if methodNameStr == "searchProviderProxyCandidateList"
+                            else method()
+                        )
+
+                    self.assertIsNone(resultStr)
+                    self.assertEqual(service.rankedProxyList, [])
+                    self.assertEqual(service.rankedProxyDictList, [])
+
     def testGetReturnsSavedWorkingProxyFromKeyVal(self) -> None:
         expectedKeyStr = hashStringValue(KEY_VAL_DUMMY_PROXY_KEY_STR)
         savedValueStr = json.dumps(
