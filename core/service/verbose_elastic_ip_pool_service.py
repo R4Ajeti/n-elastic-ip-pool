@@ -107,17 +107,17 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logDebug("[run] key source:", "[redacted-key-source]")
         self.logDebug("[run] hashed storage key:", "[redacted-storage-key]")
         self.logInfo("[run] log level:", self.loggerLevelStr)
-        self.logInfo(
+        self.logDebug(
             "[run] selection:",
             f"mode={self.proxySelectionModeStr}",
             f"resultCount={self.getReadableCountStr(self.proxyResultCountInt)}",
         )
-        self.logInfo(
+        self.logDebug(
             "[run] validation:",
             f"passes={self.proxyValidationSuccessCountInt}",
             f"maxTimingMs={self.proxyMaxTimingMillisecondInt}",
         )
-        self.logInfo(
+        self.logDebug(
             "[run] limits:",
             f"translationMaxUseCount={self.proxyTranslationMaxUseCountInt}",
             f"translationMinHealthCount={self.proxyTranslationMinHealthCountInt}",
@@ -152,7 +152,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             self.redactProxyListValue(self.rankedProxyList or []),
         )
         for proxyDict in self.rankedProxyDictList or []:
-            self.logInfo(
+            self.logDebug(
                 "[run] validated proxy:",
                 self.redactProxyValue(proxyDict.get("proxy")),
                 f"averageTimingMs={proxyDict.get('averageTimingMs')}",

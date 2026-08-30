@@ -202,6 +202,7 @@ class ElasticIpPoolService:
 
         selectedProxyDict = self.rankedProxyDictList[0]
         selectedProxyStr = str(selectedProxyDict["proxy"])
+        self.ensureProxyTranslationCount(selectedProxyStr)
         self.recordSuccessfulProxyUsage(
             selectedProxyStr,
             self.buildProxyUsageRecord(selectedProxyDict, PROXY_SOURCE_SAVED_PROXY_STR),
@@ -515,7 +516,11 @@ class ElasticIpPoolService:
             return {"key": keyStr, "count": localCountInt, "source": "local"}
         try:
             resultDict = self.keyValStoreProxy.getValue(keyStr)
-            countInt = int(resultDict["value"]) if resultDict.get("exists") else 0
+            value = resultDict.get("value")
+            missingBool = not resultDict.get("exists") or value is None or (
+                isinstance(value, str) and value.strip().lower() in {"", "null"}
+            )
+            countInt = 0 if missingBool else int(value)
         except (KeyValStoreProxyError, TypeError, ValueError, KeyError) as error:
             self.onProxyTranslationCountFailure(error)
             return {"key": keyStr, "count": localCountInt, "source": "local-fallback"}
@@ -523,8 +528,34 @@ class ElasticIpPoolService:
         return {
             "key": keyStr,
             "count": countInt,
-            "source": "keyval" if resultDict.get("exists") else "missing",
+            "source": "missing" if missingBool else "keyval",
         }
+
+    def ensureProxyTranslationCount(self, proxyStr: str) -> dict:
+        """Initialize a confirmed absent/null counter, preserving existing values."""
+        stateDict = self.getProxyTranslationCountState(proxyStr)
+        if stateDict["source"] != "missing" or not (
+            self.saveWorkingProxyBool and self.hasWorkingProxySaveTarget()
+        ):
+            return stateDict
+        self.saveProxyTranslationCount(proxyStr, 0)
+        return self.verifyProxyTranslationCount(proxyStr)
+
+    def verifyProxyTranslationCount(self, proxyStr: str) -> dict:
+        """Read a saved counter back; keep local progress if it is not available."""
+        keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)
+        localCountInt = self.proxyTranslationCountByKeyDict.get(keyStr, 0)
+        stateDict = self.getProxyTranslationCountState(proxyStr)
+        if stateDict["source"] in {"missing", "local-fallback"}:
+            self.proxyTranslationCountByKeyDict[keyStr] = localCountInt
+            self.unsavedProxyTranslationKeySet.add(keyStr)
+            self.onProxyTranslationCountFailure(
+                KeyValStoreProxyError("Translation count could not be verified in KeyVal."),
+            )
+            return {"key": keyStr, "count": localCountInt, "source": "local"}
+        # A valid newer stored value is authoritative; never overwrite it just
+        # because another worker may have updated the counter after our write.
+        return stateDict
 
     def isProxyTranslationLimitReached(self, countInt: int) -> bool:
         return (
@@ -561,6 +592,7 @@ class ElasticIpPoolService:
     def resetProxyTranslationCount(self, proxyStr: str) -> None:
         """Start a new translation cycle for a freshly validated proxy."""
         self.saveProxyTranslationCount(proxyStr, 0)
+        self.verifyProxyTranslationCount(proxyStr)
 
     def saveProxyTranslationCount(self, proxyStr: str, countInt: int) -> None:
         keyStr = self.getKeyValProxyTranslationCountKey(proxyStr)

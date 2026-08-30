@@ -336,7 +336,13 @@ and normalized proxy address. Obtain it with
 `service.getKeyValProxyTranslationCountKey(proxyStr)`. This keeps counters separate
 from the cached proxy list and from other pools/proxies. Values are plain signed
 decimal strings (`"1"`, `"50"`, `"-5"`), not JSON lists or history objects. Missing
-keys mean zero. Successful fresh discovery explicitly resets each proxy in the
+or null counters are initialized to `0` after selecting a validated cached proxy
+when writes are enabled, using the same KeyVal key/provider as translation
+feedback. The service reads the new record back to verify it. This initialization
+works independently of logging level and does not overwrite existing numbers.
+Provider errors and malformed values do not trigger initialization. In read-only
+or local-only mode, absent counters remain an effective local zero.
+Successful fresh discovery explicitly resets each proxy in the
 returned ranked working list to `0`, starting a new translation cycle even if
 that eligible proxy had a previous positive or negative count. This also applies
 to fallback-provider discovery and threshold-triggered rediscovery. Cached-proxy
@@ -361,7 +367,8 @@ after each reset or translation-result update. Search your logs for
 [n-elastic-ip-pool] [INFO] [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true
 ```
 
-Cached selections also log the counter without modifying it. This works with
+Cached selections preserve existing counters and initialize only missing/null
+ones, then log the current value. This works with
 `run()`, `get()`, and `check()` on the verbose service:
 
 ```text
@@ -378,8 +385,8 @@ produces an explicit `no selected proxy` message instead of an invented key.
 The `[run] limits` line is configuration only: `historicalUsageLimit=100`
 belongs to the older Firebase usage history, while `translationMaxUseCount=50`
 and `translationMinHealthCount=-5` are the subtitle counter thresholds.
-INFO startup output separates selection, validation, and limits into compact
-summaries. Advanced `[run] options` and setup notes are available at DEBUG.
+Selection, validation, limits, and individual `[run] validated proxy:` timing
+details are DEBUG-only, along with advanced `[run] options` and setup notes.
 
 To verify the saved proxy value as well, search for `[proxy-cache]`:
 
@@ -420,8 +427,8 @@ are not a distributed quota guarantee.
 Every package log line starts with the unique marker `[n-elastic-ip-pool]`,
 followed by `[INFO]` or `[DEBUG]` and its category. Search for
 `[n-elastic-ip-pool]` to find all package output, `[translation-count]` for the
-counter, or `[proxy-cache]` for the saved proxy key/value. Advanced details stay
-at DEBUG; normal INFO runs include configuration, cache state, the selected
+counter, or `[proxy-cache]` for the saved proxy key/value. Configuration and
+individual validation details stay at DEBUG; normal INFO runs include cache state, the selected
 proxy, and its counter.
 
 The verbose service supports two log levels:
@@ -434,8 +441,9 @@ LOGGER=DEBUG python3 app/key_value_proxy_app.py
 ```
 
 `DEBUGGING=false` or `LOGGER=INFO` prints the selected proxy, the validated
-working proxy list, and each working proxy's timing, success count and check
-timestamp. Cached entries that fail the current check are not in this list.
+working proxy list, and cache/counter verification state. Each working proxy's
+timing, success count and check timestamp are printed only at DEBUG.
+Cached entries that fail the current check are not in the working list.
 `DEBUGGING=true` or `LOGGER=DEBUG` also prints candidate rows and detailed
 validation steps. Addresses are visible as `host:port`; credentials, URL paths,
 query strings and KeyVal paths are not included in proxy-value output.

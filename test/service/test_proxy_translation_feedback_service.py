@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import unquote, urlsplit
 
 from app.key_value_proxy_app import buildVerboseElasticIpPoolService
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
@@ -380,13 +381,14 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                 )
                 self.assertNotIn("[run] options:", textStr)
                 if methodStr == "run":
-                    self.assertIn("[run] selection: mode=fastest resultCount=all", textStr)
-                    self.assertIn("[run] validation: passes=1 maxTimingMs=2000", textStr)
-                    self.assertIn("translationMaxUseCount=50 translationMinHealthCount=-5 historicalUsageLimit=100", textStr)
+                    self.assertNotIn("[run] selection:", textStr)
+                    self.assertNotIn("[run] validation:", textStr)
+                    self.assertNotIn("[run] limits:", textStr)
+                    self.assertNotIn("[run] validated proxy:", textStr)
                 self.assertEqual(self.store.valueByKeyDict[keyStr], "12")
                 self.assertEqual(self.store.writeList, [])
 
-    def testCachedMissingCounterLogDoesNotClaimZeroWasStored(self) -> None:
+    def testCachedMissingCounterIsCreatedAndVerifiedBeforeInfoRead(self) -> None:
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
         keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
         self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
@@ -394,9 +396,10 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             self.assertEqual(service.run(), self.proxyStr)
         textStr = "\n".join(" ".join(str(value) for value in call.args)
                             for call in printMock.call_args_list)
-        self.assertIn(f"key={keyStr} count=0 source=missing event=read", textStr)
-        self.assertNotIn("stored=true", textStr)
-        self.assertNotIn(keyStr, self.store.valueByKeyDict)
+        self.assertIn(f"key={keyStr} count=0 source=keyval event=read", textStr)
+        self.assertIn("stored=true", textStr)
+        self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
+        self.assertEqual(self.store.writeList, [(keyStr, "0")])
 
     def testCounterReadLogDistinguishesUnavailableDatabase(self) -> None:
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
@@ -448,6 +451,105 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             textStr = " ".join(str(value) for value in printMock.call_args.args)
             for secretStr in ("sample-user", "sample-password", "sample-secret", "http://"):
                 self.assertNotIn(secretStr, textStr)
+
+    def testNullAndEmptyCountersInitializeButExistingNumbersArePreserved(self) -> None:
+        for value, expectedStr in ((None, "0"), ("", "0"), ("null", "0"), ("0", "0"), ("12", "12"), ("-2", "-2")):
+            with self.subTest(value=value):
+                self.store = MemoryKeyValStoreProxy()
+                service = self.buildService()
+                keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+                self.store.valueByKeyDict[keyStr] = value
+                self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
+                self.assertEqual(service.check(), self.proxyStr)
+                self.assertEqual(self.store.valueByKeyDict[keyStr], expectedStr)
+                self.assertEqual(len(self.store.writeList), 1 if value in (None, "", "null") else 0)
+                service.check()
+                self.assertEqual(len(self.store.writeList), 1 if value in (None, "", "null") else 0)
+
+    def testInitializationIsIndependentOfLoggingLevel(self) -> None:
+        for levelStr in ("INFO", "DEBUG", "WARNING", "ERROR"):
+            with self.subTest(levelStr=levelStr):
+                self.store = MemoryKeyValStoreProxy()
+                service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr=levelStr)
+                keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+                self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
+                with patch("builtins.print"):
+                    self.assertEqual(service.get(), self.proxyStr)
+                self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
+
+    def testReadOnlyAndLocalOnlyDoNotCreateMissingCounters(self) -> None:
+        for useSavedBool in (True, False):
+            service = self.buildService(useSavedProxyBool=useSavedBool, saveWorkingProxyBool=False)
+            stateDict = service.ensureProxyTranslationCount(self.proxyStr)
+            self.assertEqual(stateDict["source"], "missing" if useSavedBool else "local")
+            self.assertEqual(self.store.writeList, [])
+
+    def testInvalidOrFailedReadsDoNotInitializeZero(self) -> None:
+        service = self.buildService()
+        keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+        for valueStr in ("invalid", "1.5", "{}"):
+            self.store.valueByKeyDict[keyStr] = valueStr
+            self.assertEqual(service.ensureProxyTranslationCount(self.proxyStr)["source"], "local-fallback")
+            self.assertEqual(self.store.valueByKeyDict[keyStr], valueStr)
+        self.store.readErrorBool = True
+        self.assertEqual(service.ensureProxyTranslationCount(self.proxyStr)["source"], "local-fallback")
+        self.assertEqual(self.store.writeList, [])
+
+    def testInitializationWriteAndVerificationFailuresStayLocal(self) -> None:
+        for failureStr in ("write-error", "rejected", "missing-after-write", "read-error-after-write"):
+            with self.subTest(failureStr=failureStr):
+                self.store = MemoryKeyValStoreProxy()
+                service = self.buildService()
+                def failSetValue(keyStr, valueStr):
+                    if failureStr == "write-error":
+                        raise KeyValStoreProxyError("offline")
+                    if failureStr == "read-error-after-write":
+                        self.store.readErrorBool = True
+                    return {"stored": failureStr != "rejected"}
+                with patch.object(self.store, "setValue", side_effect=failSetValue):
+                    self.assertEqual(service.ensureProxyTranslationCount(self.proxyStr)["source"], "local")
+                self.store.readErrorBool = False
+                self.assertEqual(service.getProxyTranslationCountState(self.proxyStr)["source"], "local")
+                service.recordSubtitleTranslationResult(self.proxyStr, True)
+                self.assertEqual(self.store.valueByKeyDict[service.getKeyValProxyTranslationCountKey(self.proxyStr)], "1")
+
+    def testDebugIncludesConfigurationAndValidatedProxyDetails(self) -> None:
+        service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="DEBUG")
+        self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
+        with patch("builtins.print") as printMock:
+            service.run()
+        textStr = "\n".join(" ".join(str(value) for value in call.args)
+                            for call in printMock.call_args_list)
+        for categoryStr in ("selection:", "validation:", "limits:", "validated proxy:"):
+            self.assertIn(f"[n-elastic-ip-pool] [DEBUG] [run] {categoryStr}", textStr)
+            self.assertNotIn(f"[n-elastic-ip-pool] [INFO] [run] {categoryStr}", textStr)
+
+    def testRealKeyValContractCreatesAndReadsBackMissingOrNullCounter(self) -> None:
+        for nullBool in (False, True):
+            with self.subTest(nullBool=nullBool):
+                proxy = KeyValStoreProxy(baseUrlStr="https://keyval.example.test")
+                service = self.buildService(keyValStoreProxy=proxy)
+                keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
+                valueByKeyDict = {service.getKeyValProxyKey(): json.dumps([self.proxyStr])}
+                if nullBool:
+                    valueByKeyDict[keyStr] = None
+                writeList = []
+                def sendRequest(urlStr):
+                    pathList = [unquote(partStr) for partStr in urlsplit(urlStr).path.split("/")[1:]]
+                    operationStr, requestKeyStr = pathList[:2]
+                    if operationStr == "set":
+                        valueByKeyDict[requestKeyStr] = pathList[2]
+                        writeList.append((requestKeyStr, pathList[2]))
+                    return json.dumps({
+                        "key": requestKeyStr,
+                        "status": "SUCCESS" if requestKeyStr in valueByKeyDict else "-KEY-DOESNT-EXISTS-",
+                        "val": valueByKeyDict.get(requestKeyStr, ""),
+                    }), 200
+                with patch.object(proxy, "_sendGetRequest", side_effect=sendRequest):
+                    self.assertEqual(service.check(), self.proxyStr)
+                    self.assertEqual(proxy.getValue(keyStr)["value"], "0")
+                    self.assertEqual(service.getProxyTranslationCountState(self.proxyStr)["source"], "keyval")
+                self.assertEqual(writeList, [(keyStr, "0")])
 
 
 if __name__ == "__main__":

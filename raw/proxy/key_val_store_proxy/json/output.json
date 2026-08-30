@@ -1,4 +1,17 @@
 {
+  "get_missing_counter": {
+    "key": "sample-counter-key", "exists": false, "value": null, "status_code": 200
+  },
+  "get_null_counter": {
+    "key": "sample-counter-key", "exists": false, "value": null, "status_code": 200
+  },
+  "initialize_counter": {
+    "key": "sample-counter-key", "stored": true, "value": "0",
+    "response_value": "0", "response_status": "SUCCESS", "status_code": 200
+  },
+  "verify_initialized_counter": {
+    "key": "sample-counter-key", "exists": true, "value": "0", "status_code": 200
+  },
   "get_value": {
     "key": "a9362079373ac299322a9a8db4d94b5b65c392e1a188d30f5f899fb17ccb4a65",
     "exists": true,

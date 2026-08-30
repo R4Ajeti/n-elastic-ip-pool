@@ -9,7 +9,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     KEY_VAL_API_BASE_URL_STR,
     KEY_VAL_USER_AGENT_STR,
 )
-from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
+from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy, KeyValStoreProxyError
 
 
 class FakeHttpResponse:
@@ -31,6 +31,27 @@ class FakeHttpResponse:
 
 
 class KeyValStoreProxyTest(unittest.TestCase):
+    def testMissingStatusAndNullValueAreNormalizedAsAbsent(self) -> None:
+        for responseTextStr in (
+            '{"status":"-KEY-DOESNT-EXISTS-","key":"safe-key","val":""}',
+            '{"status":"SUCCESS","key":"safe-key","val":null}',
+        ):
+            with self.subTest(response=responseTextStr), patch(
+                "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
+                return_value=FakeHttpResponse(responseTextStr),
+            ):
+                self.assertEqual(KeyValStoreProxy().getValue("safe-key"), {
+                    "key": "safe-key", "exists": False, "value": None, "status_code": 200,
+                })
+
+    def testProviderErrorIsNotReportedAsMissing(self) -> None:
+        with patch(
+            "n_elastic_ip_pool.proxy.key_val_store_proxy.urlopen",
+            return_value=FakeHttpResponse('{"status":"AUTH-ERROR","val":null}'),
+        ):
+            with self.assertRaises(KeyValStoreProxyError):
+                KeyValStoreProxy().getValue("safe-key")
+
     def testSignedTranslationCountersRoundTripIncludingZero(self) -> None:
         for countInt in (0, 1, 50, 999, -5):
             for responseTextStr in (

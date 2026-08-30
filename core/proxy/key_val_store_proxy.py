@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     DEFAULT_TIMEOUT_SECOND_INT,
     KEY_VAL_API_BASE_URL_STR,
+    KEY_VAL_MISSING_KEY_STATUS_STR,
     KEY_VAL_USER_AGENT_STR,
 )
 
@@ -48,7 +49,11 @@ class KeyValStoreProxy:
                 f"KeyVal get request failed with status {error.code}.",
             ) from error
 
-        valueStr, _ = self._extractValueAndStatusFromResponse(responseTextStr)
+        valueStr, responseStatusStr = self._extractValueAndStatusFromResponse(responseTextStr)
+        if responseStatusStr == KEY_VAL_MISSING_KEY_STATUS_STR:
+            return {"key": keyStr, "exists": False, "value": None, "status_code": statusCodeInt}
+        if responseStatusStr and responseStatusStr != "SUCCESS":
+            raise KeyValStoreProxyError("KeyVal get request returned a provider error.")
 
         return {
             "key": keyStr,
@@ -139,6 +144,8 @@ class KeyValStoreProxy:
 
         valueStr = responseDict.get("val")
         statusStr = responseDict.get("status")
+        if "val" in responseDict and valueStr is None:
+            return None, None if statusStr is None else str(statusStr)
         return (
             responseTextStr if valueStr is None else str(valueStr),
             None if statusStr is None else str(statusStr),

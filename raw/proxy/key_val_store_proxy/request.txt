@@ -24,3 +24,12 @@ PROXY_TRANSLATION_MAX_USE_COUNT defaults to 50; PROXY_TRANSLATION_MIN_HEALTH_COU
 Limit evaluation and rediscovery are service responsibilities, not KeyValStoreProxy behavior.
 These examples use the default pool namespace and proxy-one.example.net:8080.
 Read/modify/write is not atomic; use a single writer for each counter namespace/pool.
+
+Missing/null counter initialization:
+- GET https://api.keyval.org/get/{COUNTER_KEY}
+- A HTTP-200 body {"status":"-KEY-DOESNT-EXISTS-","key":"<COUNTER_KEY>","val":""} is normalized as exists=false, value=null, like HTTP 404.
+- A successful response with "val":null is also normalized as exists=false, value=null.
+- Other provider error statuses raise KeyValStoreProxyError; they must not trigger zero initialization.
+- After selecting a working cached proxy, the service stores 0 only for an absent/null counter when writes are enabled, then reads the same key back.
+- Existing numeric values, including 0 and negative values, are preserved on cache selection.
+- The service logs a verified KeyVal read only when that read succeeds; an acknowledged write alone is not read-back verification.

@@ -105,7 +105,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         environmentPatch.start()
         self.addCleanup(environmentPatch.stop)
 
-    def testInfoShowsOnlyWorkingCachedListAndTimings(self) -> None:
+    def testInfoShowsWorkingCachedListWithoutIndividualTimings(self) -> None:
         keyValStoreProxy = FakeKeyValStoreProxy()
         keyValStoreProxy.valueStr = '["working.example.net:8080","failed.example.net:8080"]'
         healthCheckProxy = FakeWorkingElasticIpHealthCheckProxy()
@@ -122,7 +122,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         self.assertIn('[cache] working proxy list: ["working.example.net:8080"]', outputStr)
         self.assertIn('[run] working proxy list: ["working.example.net:8080"]', outputStr)
         self.assertIn('[run] selected proxy: working.example.net:8080', outputStr)
-        self.assertIn('averageTimingMs=50 successCount=1 checkedAt=', outputStr)
+        self.assertNotIn('[run] validated proxy:', outputStr)
         workingOutputStr = "\n".join(
             lineStr for lineStr in outputStr.splitlines()
             if "[proxy-cache]" not in lineStr
