@@ -70,8 +70,7 @@ Install locally for development:
 pip install -e ".[test]"
 ```
 
-The package requires Python 3.11 or newer and has no required third-party
-runtime dependencies.
+The package requires Python 3.11 or newer and uses `sentry-sdk` for optional remote logging.
 
 ## Purpose
 
@@ -446,6 +445,44 @@ types. Unsaved progress cannot survive a restart. KeyVal read/modify/write is
 not atomic: use one reporting worker per KeyVal database; concurrent writers
 require a provider with atomic counters. Limits depend on caller feedback and
 are not a distributed quota guarantee.
+
+## Sentry Logs
+
+Set these variables in the process environment (or in the application's loaded
+`.env` file). The same names work in all three repositories:
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `SENTRY_DSN` | Sentry project DSN; enables remote logs when nonblank | Disabled |
+| `SENTRY_ENVIRONMENT` | Deployment label, such as development or production | `development` |
+| `SENTRY_RELEASE` | Optional deployed version or commit label | Unset |
+| `SENTRY_LOG_LEVEL` | Minimum remote level: DEBUG, INFO, WARNING, ERROR, CRITICAL | `INFO` |
+
+`VerboseElasticIpPoolService` forwards its existing console messages and reads
+Sentry settings from its `envFilePathStr` (default `.env`); exported values,
+including an explicitly blank DSN, take precedence. The base service is silent.
+
+No Sentry auth token is required. `WARN` is accepted; invalid remote levels fall
+back to INFO. Existing `LOGGER`/`DEBUGGING` controls still determine which local
+messages are emitted; `SENTRY_LOG_LEVEL` applies an additional remote filter.
+The SDK dependency is installed with the package, but a blank DSN leaves it inactive.
+
+Logs include `repository=n-proxy` and `service.name=n-proxy` attributes.
+In Sentry's Logs view, filter with `repository:n-proxy` or group by `repository`
+when the repositories share a project. These identities are constants, independent
+of the environment variable names and existing console logger names.
+
+Each repository uses an isolated client, so it preserves a host application's
+Sentry configuration and captures only its own project messages. It does not
+turn on automatic error reporting or tracing. Existing message redaction is
+preserved; only message text and selected metadata are sent, without arbitrary
+LogRecord extras or exception locals. Debug message text can include application
+previews. Configuration failures warn once per configuration and retain local
+logging. Buffered logs flush on normal interpreter exit (up to two seconds per
+client); abrupt termination can lose buffered messages. Restart after changing
+configuration to apply it consistently to all active services.
+
+See the [Sentry Python Logs documentation](https://docs.sentry.io/platforms/python/logs/).
 
 ## Logging
 

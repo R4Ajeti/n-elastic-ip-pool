@@ -33,6 +33,7 @@ from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealt
 from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import GeonodeFreeProxyListProxy
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
+from n_elastic_ip_pool.proxy.sentry_logs_proxy import getSentryLogsProxy
 from n_elastic_ip_pool.repo.firebase_proxy_usage_history_repo import (
     FirebaseProxyUsageHistoryRepo,
 )
@@ -71,6 +72,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.finalValueStr: str | None = None
         self.rankedProxyList: list[str] | None = None
         self.lastCacheHitBool = False
+        # The service's existing env-file option also applies to Sentry settings.
+        self.sentryLogsProxy = getSentryLogsProxy(envFilePathStr)
         super().__init__(
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
@@ -463,6 +466,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         messageStr = " ".join(str(value) for value in valueTuple)
         for lineStr in messageStr.splitlines() or [""]:
             print(formatLogMessage(lineStr, CORE_LOGGER_NAME_STR, levelStr, LOGGER_FORMAT_STR))
+            self.sentryLogsProxy.captureMessage(lineStr, levelStr, CORE_LOGGER_NAME_STR)
 
     def normalizeLoggerLevel(self, loggerLevelStr: str) -> str:
         normalizedLoggerLevelStr = str(loggerLevelStr or DEFAULT_LOGGER_LEVEL_STR).upper()

@@ -1,0 +1,8 @@
+{
+  "body": "Operation completed count=3",
+  "attributes": {
+    "repository": "n-proxy",
+    "service.name": "n-proxy",
+    "logger.name": "n-proxy"
+  }
+}

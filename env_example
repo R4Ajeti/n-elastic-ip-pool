@@ -8,3 +8,9 @@ PROXY_MAX_TIMING_MILLISECOND= # Maximum accepted proxy response time in millisec
 KEY_VAL_PROXY_TRANSLATION_COUNT_KEY= # Legacy setting; the shared counter key now hashes the fixed variable name keyValProxyTranslationCountKeyStr.
 PROXY_TRANSLATION_MAX_USE_COUNT=50 # Rediscover when the net translation counter reaches this positive limit.
 PROXY_TRANSLATION_MIN_HEALTH_COUNT=-3 # Rediscover when the net translation counter reaches this negative limit.
+
+# Optional Sentry Logs: blank DSN disables remote logging; no auth token needed.
+SENTRY_DSN=
+SENTRY_ENVIRONMENT=development
+SENTRY_RELEASE=
+SENTRY_LOG_LEVEL=INFO
