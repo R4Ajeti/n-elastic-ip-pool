@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` (version `1.0.6`) is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.7`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
@@ -70,7 +70,8 @@ Install locally for development:
 pip install -e ".[test]"
 ```
 
-The package requires Python 3.11 or newer and uses `sentry-sdk` for optional remote logging.
+The package requires Python 3.14 or newer and uses `n-log-forge` for console,
+timing, structured context, and optional isolated Sentry delivery.
 
 ## Purpose
 
@@ -388,7 +389,7 @@ after each reset or translation-result update. Search your logs for
 `[translation-count]`, for example:
 
 ```text
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true scope=pool
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [translation-count] key=<hashed-counter-key> count=0 source=keyval event=write stored=true scope=pool
 ```
 
 Cached selections preserve existing counters and initialize only missing/null
@@ -396,7 +397,7 @@ ones, then log the current value. This works with
 `run()`, `get()`, and `check()` on the verbose service:
 
 ```text
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080 scope=pool
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [translation-count] key=<hashed-counter-key> count=12 source=keyval event=read proxy=proxy-one.example.net:8080 scope=pool
 ```
 
 On read events, `source=keyval` means the value was read from the database
@@ -415,8 +416,8 @@ details are DEBUG-only, along with advanced `[run] options` and setup notes.
 To verify the saved proxy value as well, search for `[proxy-cache]`:
 
 ```text
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [proxy-cache] variable=keyValStoreProxyStr key=<proxy-cache-key> value=["proxy-one.example.net:8080"] source=keyval event=read state=stored-value
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [run] selected proxy: proxy-one.example.net:8080
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [proxy-cache] variable=keyValStoreProxyStr key=<proxy-cache-key> value=["proxy-one.example.net:8080"] source=keyval event=read state=stored-value
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [run] selected proxy: proxy-one.example.net:8080
 ```
 
 `keyValStoreProxyStr` names the pool-key configuration variable; `key=` is the
@@ -453,42 +454,29 @@ Set these variables in the process environment (or in the application's loaded
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `SENTRY_DSN` | Sentry project DSN; enables remote logs when nonblank | Disabled |
-| `SENTRY_ENVIRONMENT` | Deployment label, such as development or production | `development` |
+| `SENTRY_DATA_SOURCE_NAME` | Sentry project DSN; enables remote logs when nonblank | Disabled |
+| `SENTRY_ENVIRONMENT` | Deployment label, such as development or production | `production` |
 | `SENTRY_RELEASE` | Optional deployed version or commit label | Unset |
-| `SENTRY_LOG_LEVEL` | Minimum remote level: DEBUG, INFO, WARNING, ERROR, CRITICAL | `INFO` |
+| `SENTRY_LEVEL` | Minimum remote level: DEBUG, INFO, WARNING, ERROR, CRITICAL | `ERROR` |
 
-`VerboseElasticIpPoolService` forwards its existing console messages and reads
-Sentry settings from its `envFilePathStr` (default `.env`); exported values,
-including an explicitly blank DSN, take precedence. The base service is silent.
+`VerboseElasticIpPoolService` emits through `n-log-forge` and reads Sentry
+settings from its `envFilePathStr` (default `.env`); exported values take
+precedence. The base service remains silent.
 
-No Sentry auth token is required. `WARN` is accepted; invalid remote levels fall
-back to INFO. Existing `LOGGER`/`DEBUGGING` controls still determine which local
-messages are emitted; `SENTRY_LOG_LEVEL` applies an additional remote filter.
-The SDK dependency is installed with the package, but a blank DSN leaves it inactive.
-
-Logs include `repository=n-proxy` and `service.name=n-proxy` attributes.
-In Sentry's Logs view, filter with `repository:n-proxy` or group by `repository`
-when the repositories share a project. These identities are constants, independent
-of the environment variable names and existing console logger names.
-
-Each repository uses an isolated client, so it preserves a host application's
-Sentry configuration and captures only its own project messages. It does not
-turn on automatic error reporting or tracing. Existing message redaction is
-preserved; only message text and selected metadata are sent, without arbitrary
-LogRecord extras or exception locals. Debug message text can include application
-previews. Configuration failures warn once per configuration and retain local
-logging. Buffered logs flush on normal interpreter exit (up to two seconds per
-client); abrupt termination can lose buffered messages. Restart after changing
-configuration to apply it consistently to all active services.
+No Sentry auth token is required. `SENTRY_LEVEL` applies an additional remote
+threshold after the `LOGGER`/`DEBUGGING` gate. The `n-log-forge[sentry]`
+dependency supplies an isolated client without replacing a host Sentry client,
+and a blank data source name leaves remote delivery inactive. Records retain
+the `n-proxy` package hierarchy, module source, severity, timing, metadata, and
+requested exception traceback. Existing redaction remains in force.
 
 See the [Sentry Python Logs documentation](https://docs.sentry.io/platforms/python/logs/).
 
 ## Logging
 
-Every package log line starts with the local date and time including milliseconds,
-followed by ` | INFO | n-elastic-ip-pool | ` (or DEBUG) and its category. Search for
-`n-elastic-ip-pool` to find all package output, `[translation-count]` for the
+Every package log line starts with a UTC timestamp and includes severity,
+`N Proxy`, operation duration, module source, and message. Search for `N Proxy` or
+the `n-proxy` source hierarchy to find all package output, `[translation-count]` for the
 counter, or `[proxy-cache]` for the saved proxy key/value. Configuration and
 individual validation details stay at DEBUG; normal INFO runs include cache state, the selected
 proxy, and its counter.
@@ -514,16 +502,16 @@ These messages come from `VerboseElasticIpPoolService.run()` in this package,
 including when another application calls it. For example:
 
 ```text
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [cache] usable saved proxy: proxy-one.example.net:8080
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [cache] working proxy list: ["proxy-one.example.net:8080"]
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [cache] usable saved proxy: proxy-one.example.net:8080
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [cache] working proxy list: ["proxy-one.example.net:8080"]
 ```
 
 On a cache miss, only the run selection/list summary is printed at INFO after
 discovery instead:
 
 ```text
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [run] selected proxy: proxy-one.example.net:8080
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | [run] working proxy list: ["proxy-one.example.net:8080"]
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [run] selected proxy: proxy-one.example.net:8080
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 0.1s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | [run] working proxy list: ["proxy-one.example.net:8080"]
 ```
 
 Each lookup emits one `Total run time: <seconds> seconds operation=run` line. Consumers should retain the returned
@@ -635,10 +623,10 @@ MIT
 
 ## Log format
 
-All package logs use `YYYY-MM-DD HH:MM:SS,mmm | LEVEL | n-elastic-ip-pool | message`.
+All package logs use `TIMESTAMP | LEVEL | PACKAGE | DURATION | SOURCE | MESSAGE`.
 The total runtime uses two decimal places and includes the operation name, even
 when discovery raises an error. Existing INFO/DEBUG filtering and redaction remain unchanged.
 
 ```text
-2026-08-30 18:55:54,969 | INFO | n-elastic-ip-pool | Total run time: 22.56 seconds operation=run
+2026-09-11 08:35:32.335Z | INFO | N Proxy | 22.6s | n-proxy.n_elastic_ip_pool.service.verbose_elastic_ip_pool_service | Total run time: 22.56 seconds operation=run
 ```

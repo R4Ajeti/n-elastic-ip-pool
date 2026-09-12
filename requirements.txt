@@ -1,4 +1,4 @@
-sentry-sdk>=2.35.0,<3
+n-log-forge[sentry] @ git+https://github.com/R4Ajeti/n-log-forge.git
 
 # Development/test runner used by commands.txt.
 pytest==9.1.1

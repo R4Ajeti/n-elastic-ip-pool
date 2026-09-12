@@ -1,6 +1,5 @@
-CORE_LOGGER_NAME_STR = "n-elastic-ip-pool"
-CORE_LOGGER_PREFIX_STR = "[n-elastic-ip-pool]"
-LOGGER_FORMAT_STR = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+CORE_LOGGER_NAME_STR = "n-proxy"
+CORE_LOGGER_PREFIX_STR = "[n-proxy]"
 LOGGER_LEVEL_ENV_NAME_STR = "LOGGER"
 DEBUGGING_ENV_NAME_STR = "DEBUGGING"
 LOGGER_LEVEL_DEBUG_STR = "DEBUG"

@@ -10,7 +10,7 @@ PROXY_TRANSLATION_MAX_USE_COUNT=50 # Rediscover when the net translation counter
 PROXY_TRANSLATION_MIN_HEALTH_COUNT=-3 # Rediscover when the net translation counter reaches this negative limit.
 
 # Optional Sentry Logs: blank DSN disables remote logging; no auth token needed.
-SENTRY_DSN=
-SENTRY_ENVIRONMENT=development
+SENTRY_DATA_SOURCE_NAME=
+SENTRY_ENVIRONMENT=production
 SENTRY_RELEASE=
-SENTRY_LOG_LEVEL=INFO
+SENTRY_LEVEL=ERROR

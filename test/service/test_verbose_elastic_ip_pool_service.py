@@ -7,6 +7,7 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
 )
 from n_elastic_ip_pool.helper.string_hash_helper import hashStringValue
 from n_elastic_ip_pool.service.verbose_elastic_ip_pool_service import VerboseElasticIpPoolService
+from test.log_capture_helper import capturePackageLogs
 
 
 class FakeKeyValStoreProxy:
@@ -107,9 +108,9 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
 
     def testFailedRunReportsTotalTimeOnceAndPreservesError(self) -> None:
         service = VerboseElasticIpPoolService(loggerLevelStr="INFO")
-        with patch.object(service, "get", side_effect=RuntimeError("offline failure")), patch(
-            "builtins.print"
-        ) as printMock:
+        with patch.object(
+            service, "get", side_effect=RuntimeError("offline failure")
+        ), capturePackageLogs() as printMock:
             with self.assertRaisesRegex(RuntimeError, "offline failure"):
                 service.run()
         outputStr = "\n".join(call.args[0] for call in printMock.call_args_list)
@@ -127,7 +128,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             elasticIpHealthCheckProxy=healthCheckProxy,
             loggerLevelStr="INFO",
         )
-        with patch.object(healthCheckProxy, "testProxy", side_effect=[workingResultDict, failedResultDict]), patch("builtins.print") as printMock:
+        with patch.object(healthCheckProxy, "testProxy", side_effect=[workingResultDict, failedResultDict]), capturePackageLogs() as printMock:
             service.run()
         outputStr = "\n".join(" ".join(str(value) for value in call.args) for call in printMock.call_args_list)
         self.assertIn('[cache] working proxy list: ["working.example.net:8080"]', outputStr)
@@ -147,24 +148,22 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             with self.subTest(level=levelStr):
                 with patch.dict("os.environ", {"LOGGER": levelStr, "DEBUGGING": ""}):
                     service = VerboseElasticIpPoolService()
-                with patch("builtins.print") as printMock:
+                with capturePackageLogs() as printMock:
                     service.logInfo("summary")
                     service.logDebug("details")
                 printMock.assert_not_called()
 
     def testEveryLogLineHasPackagePrefixAndLevel(self) -> None:
         service = VerboseElasticIpPoolService(loggerLevelStr="DEBUG")
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.logInfo("[test] info")
             service.logDebug("[test] debug\nsecond line")
         lineList = [" ".join(str(value) for value in call.args)
                     for call in printMock.call_args_list]
-        for lineStr in lineList:
-            self.assertRegex(lineStr, r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3} \| (INFO|DEBUG) \| n-elastic-ip-pool \| ")
-        self.assertEqual([lineStr.split(" | ", 1)[1] for lineStr in lineList], [
-            "INFO | n-elastic-ip-pool | [test] info",
-            "DEBUG | n-elastic-ip-pool | [test] debug",
-            "DEBUG | n-elastic-ip-pool | second line",
+        self.assertEqual(lineList, [
+            "INFO | n-proxy | [test] info",
+            "DEBUG | n-proxy | [test] debug",
+            "DEBUG | n-proxy | second line",
         ])
 
     def testProxyListLogNeverIncludesCredentialsOrQuerySecrets(self) -> None:
@@ -185,7 +184,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
         )
         expectedKeyStr = hashStringValue("custom-key-source")
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             resultStr = service.run()
 
         self.assertIsNone(resultStr)
@@ -214,7 +213,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             saveWorkingProxyBool=True,
         )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             resultStr = service.run()
 
         printedTextStr = "\n".join(
@@ -250,7 +249,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             proxyScrapeProxy=proxyScrapeProxy,
         )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             resultStr = service.run()
 
         printedTextStr = "\n".join(
@@ -279,7 +278,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
         )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             self.assertEqual(service.run(), "saved-fast.example.net:8080")
             self.assertEqual(service.rankedProxyList, ["saved-fast.example.net:8080"])
 
@@ -306,7 +305,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             saveWorkingProxyBool=True,
         )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             resultStr = service.run()
 
         printedTextStr = "\n".join(
@@ -333,7 +332,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             loggerLevelStr="DEBUG",
         )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.run()
 
         printedTextStr = "\n".join(
@@ -358,7 +357,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
                 geonodeFreeProxyListProxy=FakeGeonodeFreeProxyListProxy(),
             )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.run()
 
         printedTextStr = "\n".join(
@@ -401,7 +400,7 @@ class VerboseElasticIpPoolServiceTest(unittest.TestCase):
             loggerLevelStr="trace",
         )
 
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.run()
 
         printedTextStr = "\n".join(

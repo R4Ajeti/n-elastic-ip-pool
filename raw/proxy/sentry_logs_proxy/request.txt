@@ -1,6 +1,0 @@
-SDK-managed POST to https://sentry.example/api/1/envelope/
-Authentication: SDK X-Sentry-Auth derived from SENTRY_DSN (placeholder public key).
-Content-Type: application/x-sentry-envelope
-The SDK batches structured logs; no direct HTTP requests are constructed here.
-JSON files show adapter captureMessage input and the conceptual log attributes,
-not a raw envelope or a synchronous server response.

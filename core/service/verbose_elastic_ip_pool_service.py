@@ -1,9 +1,9 @@
 import json
-import time
+
+from n_log_forge import getLogger
 
 from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     CORE_LOGGER_NAME_STR,
-    LOGGER_FORMAT_STR,
     DEFAULT_LOGGER_LEVEL_STR,
     DEFAULT_PROXY_CANDIDATE_LIMIT_INT,
     DEFAULT_PROXY_RELEASE_CHANNEL_STR,
@@ -23,8 +23,10 @@ from n_elastic_ip_pool.constant.elastic_ip_pool_constant import (
     PROXY_MAX_TIMING_MILLISECOND_INT,
     PROXY_VALIDATION_SUCCESS_COUNT_INT,
 )
-from n_elastic_ip_pool.helper.logger_level_helper import getLoggerLevelNameFromEnv
-from n_elastic_ip_pool.helper.log_message_format_helper import formatLogMessage
+from n_elastic_ip_pool.helper.logger_level_helper import (
+    configureLoggingFromEnv,
+    getLoggerLevelNameFromEnv,
+)
 from n_elastic_ip_pool.helper.sensitive_value_redaction_helper import (
     formatNetworkLocationForLog,
     redactUrlPathValue,
@@ -33,11 +35,13 @@ from n_elastic_ip_pool.proxy.elastic_ip_health_check_proxy import ElasticIpHealt
 from n_elastic_ip_pool.proxy.geonode_free_proxy_list_proxy import GeonodeFreeProxyListProxy
 from n_elastic_ip_pool.proxy.key_val_store_proxy import KeyValStoreProxy
 from n_elastic_ip_pool.proxy.proxy_scrape_proxy import ProxyScrapeProxy
-from n_elastic_ip_pool.proxy.sentry_logs_proxy import getSentryLogsProxy
 from n_elastic_ip_pool.repo.firebase_proxy_usage_history_repo import (
     FirebaseProxyUsageHistoryRepo,
 )
 from n_elastic_ip_pool.service.elastic_ip_pool_service import ElasticIpPoolService
+
+
+logger = getLogger(f"{CORE_LOGGER_NAME_STR}.{__name__}")
 
 
 class VerboseElasticIpPoolService(ElasticIpPoolService):
@@ -72,8 +76,6 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.finalValueStr: str | None = None
         self.rankedProxyList: list[str] | None = None
         self.lastCacheHitBool = False
-        # The service's existing env-file option also applies to Sentry settings.
-        self.sentryLogsProxy = getSentryLogsProxy(envFilePathStr)
         super().__init__(
             elasticIpHealthCheckProxy=elasticIpHealthCheckProxy,
             keyValStoreProxy=keyValStoreProxy,
@@ -104,16 +106,22 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
             DEFAULT_LOGGER_LEVEL_STR,
         )
         self.loggerLevelStr = self.normalizeLoggerLevel(resolvedLoggerLevelStr)
+        configureLoggingFromEnv(
+            CORE_LOGGER_NAME_STR,
+            self.loggerLevelStr,
+            envFilePathStr,
+        )
 
     def run(self) -> str | None:
-        startFloat = time.perf_counter()
+        timer = logger.startTimer("run")
         try:
             return self._runDiscovery()
         finally:
             self.logInfo(
-                "Total run time:", f"{max(0.0, time.perf_counter() - startFloat):.2f}",
+                "Total run time:", f"{timer.elapsedSeconds:.2f}",
                 "seconds operation=run",
             )
+            timer.stop()
 
     def _runDiscovery(self) -> str | None:
         self.lastCacheHitBool = False
@@ -250,7 +258,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         )
 
     def search(self) -> str | None:
-        startFloat = time.perf_counter()
+        timer = logger.startTimer("proxy_discovery")
         self.logInfo("[discovery] starting ProxyScrape search")
         try:
             resultStr = super().search()
@@ -262,7 +270,8 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
                 self.logSelectedProxyTranslationCount(resultStr)
             return resultStr
         finally:
-            self.logInfo("[discovery] took", self.getElapsedSecondStr(startFloat), "seconds")
+            self.logInfo("[discovery] took", f"{timer.elapsedSeconds:.3f}", "seconds")
+            timer.stop()
 
     def fetchProxyCandidateText(self) -> str:
         return self.fetchProxyScrapeCandidateText()
@@ -445,9 +454,6 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
         self.logInfo("[cache] save complete")
         return resultStr
 
-    def getElapsedSecondStr(self, startFloat: float) -> str:
-        return f"{max(0.0, time.perf_counter() - startFloat):.3f}"
-
     def getReadableCountStr(self, countInt: int) -> str:
         if countInt:
             return str(countInt)
@@ -465,8 +471,7 @@ class VerboseElasticIpPoolService(ElasticIpPoolService):
     def logMessage(self, levelStr: str, *valueTuple) -> None:
         messageStr = " ".join(str(value) for value in valueTuple)
         for lineStr in messageStr.splitlines() or [""]:
-            print(formatLogMessage(lineStr, CORE_LOGGER_NAME_STR, levelStr, LOGGER_FORMAT_STR))
-            self.sentryLogsProxy.captureMessage(lineStr, levelStr, CORE_LOGGER_NAME_STR)
+            getattr(logger, levelStr.lower())("%s", lineStr)
 
     def normalizeLoggerLevel(self, loggerLevelStr: str) -> str:
         normalizedLoggerLevelStr = str(loggerLevelStr or DEFAULT_LOGGER_LEVEL_STR).upper()

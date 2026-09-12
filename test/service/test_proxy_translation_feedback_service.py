@@ -22,6 +22,7 @@ from test.service.test_elastic_ip_pool_service import (
     FakeProxyUsageHistoryRepo,
     buildTestResult,
 )
+from test.log_capture_helper import capturePackageLogs
 
 
 class MemoryKeyValStoreProxy(KeyValStoreProxy):
@@ -90,7 +91,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                     service = self.buildService(serviceClass)
                     keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
                     self.store.valueByKeyDict[keyStr] = str(initialInt)
-                    with patch.object(service, "search") as searchMock, patch("builtins.print"):
+                    with patch.object(service, "search") as searchMock, capturePackageLogs():
                         service.recordSubtitleTranslationResult(
                             self.proxyStr, successBool, not successBool, rediscoverBool=False,
                         )
@@ -353,7 +354,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         ):
             service.proxyScrapeProxy = FakeProxyScrapeProxy(candidateTextStr)
             self.store.writeList.clear()
-            with patch("builtins.print") as printMock:
+            with capturePackageLogs() as printMock:
                 self.assertIsNotNone(service.search())
             logLineList = [
                 " ".join(str(value) for value in call.args)
@@ -422,7 +423,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
         for storedBool in (True, False):
             self.store.storedBool = storedBool
-            with patch("builtins.print") as printMock:
+            with capturePackageLogs() as printMock:
                 service.resetProxyTranslationCount(self.proxyStr)
                 service.recordSubtitleTranslationResult(self.proxyStr, True)
             textStr = "\n".join(
@@ -437,7 +438,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
 
     def testQuietLoggerSuppressesCounterInfo(self) -> None:
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="WARNING")
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.resetProxyTranslationCount(self.proxyStr)
         printMock.assert_not_called()
 
@@ -448,7 +449,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                 keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
                 self.store.valueByKeyDict[keyStr] = "12"
                 self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
-                with patch("builtins.print") as printMock:
+                with capturePackageLogs() as printMock:
                     self.assertEqual(getattr(service, methodStr)(), self.proxyStr)
                 textStr = "\n".join(" ".join(str(value) for value in call.args)
                                     for call in printMock.call_args_list)
@@ -470,7 +471,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
         keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
         self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             self.assertEqual(service.run(), self.proxyStr)
         textStr = "\n".join(" ".join(str(value) for value in call.args)
                             for call in printMock.call_args_list)
@@ -485,7 +486,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
         self.store.valueByKeyDict[keyStr] = "12"
         self.assertEqual(service.getProxyTranslationCount(self.proxyStr), 12)
         self.store.readErrorBool = True
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.logSelectedProxyTranslationCount(self.proxyStr)
         textStr = " ".join(str(value) for value in printMock.call_args.args)
         self.assertIn(f"key={keyStr} count=12 source=local-fallback event=read", textStr)
@@ -493,7 +494,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
     def testQuietLoggerDoesNotReadCounterJustForDisplay(self) -> None:
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="WARNING")
         with patch.object(service, "getProxyTranslationCountState") as readMock:
-            with patch("builtins.print") as printMock:
+            with capturePackageLogs() as printMock:
                 service.logSelectedProxyTranslationCount(self.proxyStr)
         readMock.assert_not_called()
         printMock.assert_not_called()
@@ -503,7 +504,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             VerboseElasticIpPoolService, loggerLevelStr="INFO",
             proxyScrapeProxy=FakeProxyScrapeProxy(),
         )
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             self.assertIsNone(service.run())
         textStr = "\n".join(" ".join(str(value) for value in call.args)
                             for call in printMock.call_args_list)
@@ -512,7 +513,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
 
     def testProxyCacheWriteLogsDatabaseKeyAndSavedValue(self) -> None:
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="INFO")
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.update(json.dumps([self.proxyStr]))
         textStr = "\n".join(" ".join(str(value) for value in call.args)
                             for call in printMock.call_args_list)
@@ -524,7 +525,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
             '["http://sample-user:sample-password@proxy.example.net:8080/private?token=sample-secret"]',
             '["http://[broken"]',
         ):
-            with patch("builtins.print") as printMock:
+            with capturePackageLogs() as printMock:
                 service.logProxyCacheValue("safe-test-key", valueStr, "keyval", "read")
             textStr = " ".join(str(value) for value in printMock.call_args.args)
             for secretStr in ("sample-user", "sample-password", "sample-secret", "http://"):
@@ -551,7 +552,7 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
                 service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr=levelStr)
                 keyStr = service.getKeyValProxyTranslationCountKey(self.proxyStr)
                 self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
-                with patch("builtins.print"):
+                with capturePackageLogs():
                     self.assertEqual(service.get(), self.proxyStr)
                 self.assertEqual(self.store.valueByKeyDict[keyStr], "0")
 
@@ -594,13 +595,13 @@ class ProxyTranslationFeedbackServiceTest(unittest.TestCase):
     def testDebugIncludesConfigurationAndValidatedProxyDetails(self) -> None:
         service = self.buildService(VerboseElasticIpPoolService, loggerLevelStr="DEBUG")
         self.store.valueByKeyDict[service.getKeyValProxyKey()] = json.dumps([self.proxyStr])
-        with patch("builtins.print") as printMock:
+        with capturePackageLogs() as printMock:
             service.run()
         textStr = "\n".join(" ".join(str(value) for value in call.args)
                             for call in printMock.call_args_list)
         for categoryStr in ("selection:", "validation:", "limits:", "validated proxy:"):
-            self.assertIn(f"DEBUG | n-elastic-ip-pool | [run] {categoryStr}", textStr)
-            self.assertNotIn(f"INFO | n-elastic-ip-pool | [run] {categoryStr}", textStr)
+            self.assertIn(f"DEBUG | n-proxy | [run] {categoryStr}", textStr)
+            self.assertNotIn(f"INFO | n-proxy | [run] {categoryStr}", textStr)
 
     def testRealKeyValContractCreatesAndReadsBackMissingOrNullCounter(self) -> None:
         for nullBool in (False, True):
