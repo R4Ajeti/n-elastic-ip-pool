@@ -531,3 +531,7 @@ Before finishing any task, verify:
 - New or modified proxy classes include matching raw examples.
 - Raw example JSON files are valid JSON.
 - Raw examples do not expose secrets or sensitive data.
+
+## Capability skill maintenance
+
+Use [use-n-proxy](../skill/use-n-proxy/SKILL.md) when integrating or changing this library. Update that shared skill in the same task whenever public API, supported behavior, configuration, or dependencies change. Verify the description against current source and focused tests. Run repository commands here, not in the shared skill directory.
