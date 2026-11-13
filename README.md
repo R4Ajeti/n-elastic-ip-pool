@@ -1,6 +1,6 @@
 # n-elastic-ip-pool
 
-`n-elastic-ip-pool` (version `1.0.7`) is a low-level Python package for discovering, validating,
+`n-elastic-ip-pool` (version `1.0.8`) is a low-level Python package for discovering, validating,
 ranking, caching, and returning working proxy/IP resources. It keeps provider
 requests behind proxy classes, selection rules inside the service layer, and
 storage access behind repository or KeyVal abstractions.
